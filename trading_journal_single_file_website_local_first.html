@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trading Journal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- localForage for IndexedDB/localStorage abstraction -->
+  <script src="https://unpkg.com/localforage@1.10.0/dist/localforage.min.js"></script>
+  <!-- dayjs for dates -->
+  <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
+  <link rel="icon" href="data:," />
+  <style>
+    html { scroll-behavior: smooth; }
+    .dropzone-dashed { border: 2px dashed rgb(209 213 219); }
+    .thumb { max-height: 128px; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="h-8 w-8 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">TJ</div>
+      <h1 class="text-xl font-semibold">Trading Journal</h1>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="btn-new" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">New Entry</button>
+        <button id="btn-export" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900">Export</button>
+        <label class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 cursor-pointer">
+          <input id="file-import" type="file" accept="application/json" class="hidden" />Import
+        </label>
+        <button id="btn-clear" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700" title="Clear ALL data (export first)">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Filters -->
+    <section class="grid md:grid-cols-4 gap-3 mb-6">
+      <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300"/>
+      <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300">
+        <option value="">All Symbols</option>
+      </select>
+      <select id="filter-direction" class="px-3 py-2 rounded-xl border border-slate-300">
+        <option value="">All Directions</option>
+        <option>Long</option>
+        <option>Short</option>
+      </select>
+      <select id="filter-outcome" class="px-3 py-2 rounded-xl border border-slate-300">
+        <option value="">All Outcomes</option>
+        <option>Win</option>
+        <option>Loss</option>
+        <option>BE</option>
+      </select>
+    </section>
+
+    <!-- KPIs -->
+    <section id="kpis" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></section>
+
+    <!-- Table -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm" id="entries-table">
+          <thead class="bg-slate-100 text-slate-600 uppercase text-xs">
+            <tr>
+              <th class="text-left px-4 py-3">Date</th>
+              <th class="text-left px-4 py-3">Symbol</th>
+              <th class="text-left px-4 py-3">Dir</th>
+              <th class="text-left px-4 py-3">Setup</th>
+              <th class="text-right px-4 py-3">R</th>
+              <th class="text-left px-4 py-3">Outcome</th>
+              <th class="text-left px-4 py-3">Tags</th>
+              <th class="text-left px-4 py-3">Notes</th>
+              <th class="text-left px-4 py-3">Shots</th>
+              <th class="text-left px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="entries-body" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="text-xs text-slate-500 mt-3">Data is stored in your browser (IndexedDB). Use Export/Import to move between devices.</p>
+  </main>
+
+  <!-- Modal -->
+  <dialog id="modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
+    <form id="entry-form" method="dialog" class="p-4 sm:p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-lg font-semibold">New Journal Entry</h2>
+        <button type="submit" class="ml-auto px-3 py-1.5 rounded-xl bg-indigo-600 text-white">Save</button>
+        <button type="button" id="btn-cancel" class="px-3 py-1.5 rounded-xl bg-slate-200">Cancel</button>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="grid gap-3">
+          <label class="text-sm">Date/Time
+            <input id="date" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required />
+          </label>
+          <label class="text-sm">Symbol
+            <input id="symbol" placeholder="NQ1!" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required />
+          </label>
+          <label class="text-sm">Direction
+            <select id="direction" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required>
+              <option>Long</option>
+              <option>Short</option>
+            </select>
+          </label>
+          <label class="text-sm">Setup
+            <input id="setup" placeholder="FVG Continuation, BAG, Sweep+Reversal…" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="text-sm">Entry
+              <input id="entry" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+            </label>
+            <label class="text-sm">Stop
+              <input id="stop" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+            </label>
+            <label class="text-sm">Exit
+              <input id="exit" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+            </label>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="text-sm">R Multiple
+              <input id="rMultiple" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" placeholder="Auto if prices given" />
+            </label>
+            <label class="text-sm">Outcome
+              <select id="outcome" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300">
+                <option>Win</option>
+                <option>Loss</option>
+                <option>BE</option>
+              </select>
+            </label>
+            <label class="text-sm">Session
+              <select id="session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300">
+                <option>NY</option>
+                <option>London</option>
+                <option>Asia</option>
+              </select>
+            </label>
+          </div>
+          <label class="text-sm">Tags (comma separated)
+            <input id="tags" placeholder="continuation, sweep, FVG" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+          </label>
+          <label class="text-sm">Notes
+            <textarea id="notes" rows="4" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" placeholder="What was your read? psychology? execution?"></textarea>
+          </label>
+        </div>
+        <div class="grid gap-3">
+          <div id="dropzone" class="dropzone-dashed rounded-2xl bg-slate-50 p-4 text-center text-slate-500">
+            <p class="mb-2 font-medium">Screenshots</p>
+            <p class="text-xs mb-2">Drag & drop, click to select, or <span class="font-semibold">paste</span> from clipboard</p>
+            <input id="file-input" type="file" accept="image/*" multiple class="hidden" />
+            <div id="thumbs" class="mt-3 grid grid-cols-3 gap-2"></div>
+          </div>
+          <div class="text-xs text-slate-500">Tip: On Windows, use <kbd>Alt</kbd>+<kbd>PrintScreen</kbd> or any snipping tool, then paste here.</div>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="row-template">
+    <tr class="hover:bg-slate-50">
+      <td class="px-4 py-3 align-top date"></td>
+      <td class="px-4 py-3 align-top symbol font-medium"></td>
+      <td class="px-4 py-3 align-top direction"></td>
+      <td class="px-4 py-3 align-top setup"></td>
+      <td class="px-4 py-3 align-top text-right r"></td>
+      <td class="px-4 py-3 align-top outcome"></td>
+      <td class="px-4 py-3 align-top tags text-xs"></td>
+      <td class="px-4 py-3 align-top notes max-w-[28ch] truncate"></td>
+      <td class="px-4 py-3 align-top shots text-xs"></td>
+      <td class="px-4 py-3 align-top">
+        <button class="btn-view px-2 py-1 rounded-lg bg-slate-200 mr-1">View</button>
+        <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white mr-1">Edit</button>
+        <button class="btn-del px-2 py-1 rounded-lg bg-rose-600 text-white">Delete</button>
+      </td>
+    </tr>
+  </template>
+
+  <dialog id="lightbox" class="rounded-2xl backdrop:bg-black/60 w-full max-w-4xl">
+    <div class="p-3 flex items-center gap-3">
+      <div class="font-medium">Screenshots</div>
+      <button id="lb-close" class="ml-auto px-3 py-1.5 rounded-xl bg-slate-200">Close</button>
+    </div>
+    <div id="lb-grid" class="p-3 grid sm:grid-cols-2 gap-3"></div>
+  </dialog>
+
+  <script>
+  dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
+
+  // --- Storage layer ---
+  const db = localforage.createInstance({ name: 'trading-journal' });
+
+  async function getEntries() {
+    return (await db.getItem('entries')) || [];
+  }
+  async function setEntries(list) { await db.setItem('entries', list); }
+
+  // --- Helpers ---
+  const qs = (sel, el=document) => el.querySelector(sel);
+  const qsa = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+  function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+  function calcR(entry, stop, exit) {
+    if (!entry || !stop || !exit) return null;
+    const risk = Math.abs(entry - stop);
+    if (risk === 0) return null;
+    const reward = Math.abs(exit - entry);
+    return +(reward / risk * (exit > entry ? (entry > stop ? 1 : -1) : (entry < stop ? 1 : -1))).toFixed(2);
+  }
+
+  function computeStats(rows) {
+    const n = rows.length;
+    const wins = rows.filter(r => r.outcome === 'Win').length;
+    const losses = rows.filter(r => r.outcome === 'Loss').length;
+    const be = rows.filter(r => r.outcome === 'BE').length;
+    const rSum = rows.reduce((s, r) => s + (Number(r.rMultiple)||0), 0);
+    const avgR = n ? (rSum / n).toFixed(2) : '0.00';
+    const wr = n ? Math.round((wins / (wins + losses || 1)) * 100) : 0;
+    return { n, wins, losses, be, rSum: +rSum.toFixed(2), avgR, wr };
+  }
+
+  function renderKPIs(rows) {
+    const { n, wr, rSum, avgR, wins, losses, be } = computeStats(rows);
+    const kpi = (label, val, sub='') => `
+      <div class="bg-white border border-slate-200 rounded-2xl p-4">
+        <div class="text-xs uppercase text-slate-500">${label}</div>
+        <div class="text-2xl font-semibold">${val}</div>
+        ${sub ? `<div class='text-xs text-slate-500 mt-1'>${sub}</div>`: ''}
+      </div>`;
+    qs('#kpis').innerHTML = [
+      kpi('Total Trades', n, `${wins}W / ${losses}L / ${be}BE`),
+      kpi('Win Rate', wr + '%'),
+      kpi('Total R', rSum),
+      kpi('Avg R/Trade', avgR)
+    ].join('');
+  }
+
+  function renderSymbolFilter(all) {
+    const sel = qs('#filter-symbol');
+    const uniq = Array.from(new Set(all.map(e => e.symbol))).filter(Boolean).sort();
+    sel.innerHTML = `<option value="">All Symbols</option>` + uniq.map(s=>`<option>${s}</option>`).join('');
+  }
+
+  function makeRow(r) {
+    const tpl = qs('#row-template').content.cloneNode(true);
+    tpl.querySelector('.date').textContent = dayjs(r.date).format('YYYY-MM-DD HH:mm');
+    tpl.querySelector('.symbol').textContent = r.symbol;
+    tpl.querySelector('.direction').textContent = r.direction;
+    tpl.querySelector('.setup').textContent = r.setup || '';
+    tpl.querySelector('.r').textContent = r.rMultiple ?? '';
+    tpl.querySelector('.outcome').textContent = r.outcome || '';
+    tpl.querySelector('.tags').textContent = (r.tags||[]).join(', ');
+    tpl.querySelector('.notes').textContent = r.notes || '';
+    tpl.querySelector('.shots').textContent = r.images?.length ? r.images.length + ' shot' + (r.images.length>1?'s':'') : '';
+    const tr = tpl.querySelector('tr');
+    tr.dataset.id = r.id;
+    tr.querySelector('.btn-del').addEventListener('click', async ()=>{
+      if (!confirm('Delete this entry?')) return;
+      const list = await getEntries();
+      const next = list.filter(x=>x.id!==r.id);
+      await setEntries(next); load();
+    });
+    tr.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
+    tr.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
+    return tr;
+  }
+
+  function applyFilters(rows) {
+    const q = qs('#filter-search').value.trim().toLowerCase();
+    const sym = qs('#filter-symbol').value;
+    const dir = qs('#filter-direction').value;
+    const out = qs('#filter-outcome').value;
+    return rows.filter(r => {
+      if (sym && r.symbol !== sym) return false;
+      if (dir && r.direction !== dir) return false;
+      if (out && r.outcome !== out) return false;
+      if (q) {
+        const hay = [r.symbol, r.setup, r.notes, (r.tags||[]).join(' ')].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  async function load() {
+    const entries = await getEntries();
+    entries.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    renderSymbolFilter(entries);
+    const filtered = applyFilters(entries);
+    const tbody = qs('#entries-body');
+    tbody.innerHTML = '';
+    filtered.forEach(r => tbody.appendChild(makeRow(r)));
+    renderKPIs(filtered);
+  }
+
+  // --- Modal logic ---
+  const modal = qs('#modal');
+  const form = qs('#entry-form');
+  const fileInput = qs('#file-input');
+  const thumbs = qs('#thumbs');
+  const clipboardImages = [];
+
+  function resetForm(data={}) {
+    form.reset(); thumbs.innerHTML = ''; clipboardImages.length = 0;
+    qs('#date').value = data.date ? dayjs(data.date).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm');
+    qs('#symbol').value = data.symbol||'';
+    qs('#direction').value = data.direction||'Long';
+    qs('#setup').value = data.setup||'';
+    qs('#entry').value = data.entry ?? '';
+    qs('#stop').value = data.stop ?? '';
+    qs('#exit').value = data.exit ?? '';
+    qs('#rMultiple').value = data.rMultiple ?? '';
+    qs('#outcome').value = data.outcome||'Win';
+    qs('#session').value = data.session||'NY';
+    qs('#tags').value = (data.tags||[]).join(', ');
+    qs('#notes').value = data.notes||'';
+    if (data.images?.length) data.images.forEach(addThumb);
+    form.dataset.id = data.id || '';
+  }
+
+  function openModal(data) { resetForm(data||{}); modal.showModal(); }
+
+  function addThumb(dataUrl) {
+    const img = document.createElement('img');
+    img.src = dataUrl; img.className = 'thumb w-full h-32 object-cover rounded-xl border border-slate-200';
+    thumbs.appendChild(img);
+  }
+
+  function fileToDataUrl(file) { return new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload = ()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+
+  async function gatherImages() {
+    const files = Array.from(fileInput.files||[]);
+    const fileUrls = await Promise.all(files.map(fileToDataUrl));
+    return [...fileUrls, ...clipboardImages];
+  }
+
+  // Paste handler
+  document.addEventListener('paste', (e)=>{
+    if (!modal.open) return;
+    const items = Array.from(e.clipboardData.items||[]).filter(i=>i.type.startsWith('image/'));
+    items.forEach(item=>{
+      const file = item.getAsFile();
+      const fr = new FileReader();
+      fr.onload = ()=>{ clipboardImages.push(fr.result); addThumb(fr.result); };
+      fr.readAsDataURL(file);
+    });
+  });
+
+  // Dropzone
+  const dz = qs('#dropzone');
+  dz.addEventListener('click', ()=> fileInput.click());
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('ring-2','ring-indigo-500'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('ring-2','ring-indigo-500'));
+  dz.addEventListener('drop', async (e)=>{
+    e.preventDefault(); dz.classList.remove('ring-2','ring-indigo-500');
+    const files = Array.from(e.dataTransfer.files||[]).filter(f=>f.type.startsWith('image/'));
+    for (const f of files) { const url = await fileToDataUrl(f); addThumb(url); clipboardImages.push(url); }
+  });
+
+  // Calculate R automatically if prices are filled
+  ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
+    const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
+    const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
+  }));
+
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const id = form.dataset.id || uid();
+    const rec = {
+      id,
+      date: new Date(qs('#date').value).toISOString(),
+      symbol: qs('#symbol').value.trim(),
+      direction: qs('#direction').value,
+      setup: qs('#setup').value.trim(),
+      entry: parseFloat(qs('#entry').value)||null,
+      stop: parseFloat(qs('#stop').value)||null,
+      exit: parseFloat(qs('#exit').value)||null,
+      rMultiple: parseFloat(qs('#rMultiple').value)||null,
+      outcome: qs('#outcome').value,
+      session: qs('#session').value,
+      tags: qs('#tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      notes: qs('#notes').value.trim(),
+      images: await gatherImages()
+    };
+    const list = await getEntries();
+    const idx = list.findIndex(x=>x.id===id);
+    if (idx>=0) list[idx] = rec; else list.push(rec);
+    await setEntries(list);
+    modal.close();
+    load();
+  });
+
+  qs('#btn-cancel').addEventListener('click', ()=> modal.close());
+  qs('#btn-new').addEventListener('click', ()=> openModal());
+
+  // Export / Import / Reset
+  qs('#btn-export').addEventListener('click', async ()=>{
+    const data = { exportedAt: new Date().toISOString(), entries: await getEntries() };
+    const blob = new Blob([JSON.stringify(data,null,2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `trading-journal-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url);
+  });
+
+  qs('#file-import').addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if (!file) return;
+    const text = await file.text();
+    try {
+      const data = JSON.parse(text);
+      if (!Array.isArray(data.entries)) throw new Error('Invalid file');
+      await setEntries(data.entries); load(); alert('Import complete');
+    } catch(err) { alert('Import failed: '+err.message); }
+    e.target.value = '';
+  });
+
+  qs('#btn-clear').addEventListener('click', async ()=>{
+    if (!confirm('This will erase all journal data on this device. Export first!')) return;
+    await setEntries([]); load();
+  });
+
+  // Lightbox
+  function openLightbox(imgs) {
+    const lb = qs('#lightbox');
+    const grid = qs('#lb-grid');
+    grid.innerHTML = imgs.map(src=>`<img src="${src}" class="w-full rounded-xl border border-slate-200"/>`).join('');
+    lb.showModal();
+  }
+  qs('#lb-close').addEventListener('click', ()=> qs('#lightbox').close());
+
+  // Filter handlers
+  ['filter-search','filter-symbol','filter-direction','filter-outcome'].forEach(id=>
+    qs('#'+id).addEventListener('input', load)
+  );
+
+  // Init
+  load();
+  </script>
+</body>
+</html>
