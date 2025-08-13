@@ -4,15 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trading Journal (Cloud Sync)</title>
-  <!-- Tailwind CSS -->
+  <!-- Tailwind CSS (warning in console is okay) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- dayjs for dates -->
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
-  <!-- Supabase JS v2 (UMD) — dual CDN for reliability -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <link rel="icon" href="data:," />
   <style>
     html { scroll-behavior: smooth; }
@@ -191,19 +188,34 @@
   // ---- Config ----
   dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
 
-  // 🔐 Ensure Supabase UMD is loaded
-  if (!window.supabase) {
-    console.error("Supabase UMD script failed to load.");
-    alert("Supabase library failed to load. Check the Network tab or try disabling extensions.");
+  // Dynamically ensure Supabase UMD is loaded (handles blocked CDNs)
+  async function loadSupabaseUMD() {
+    if (window.supabase) return;
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js',
+      'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'
+    ];
+    let lastErr = null;
+    for (const src of cdns) {
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = src; s.async = true; s.crossOrigin = 'anonymous';
+          s.onload = () => resolve();
+          s.onerror = (e) => reject(new Error('Failed to load ' + src));
+          document.head.appendChild(s);
+        });
+        if (window.supabase) return; // success
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('Supabase UMD failed to load');
   }
 
-  // ⬇️ Replace with your own project URL/key if different
-  const SUPABASE_URL = "https://hugwlxbqwgqepoxpkqyt.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c";
+  // ⬇️ YOUR Supabase project URL & anon key
+  const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
 
-  // Create client using the UMD global
-  const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  if (!sb) { throw new Error("Supabase client failed to initialize."); }
+  let sb = null; // Supabase client
   let currentUser = null;
 
   // --- Helpers ---
@@ -562,17 +574,28 @@
     load();
   });
 
-  sb.auth.onAuthStateChange((_e, session) => {
-    currentUser = session?.user ?? null;
-    ensureSession().then(load);
-  });
-
-  // Init
+  // Boot sequence: load Supabase UMD, then init client, then app
   (async function init(){
+    try {
+      await loadSupabaseUMD();
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.error(e);
+      alert('Could not load Supabase library. Try disabling extensions or another browser.');
+      return;
+    }
+
+    // Keep session state in sync
     await ensureSession();
+    window.supabase.auth.onAuthStateChange((_e, session) => {
+      currentUser = session?.user ?? null;
+      ensureSession().then(load);
+    });
+
     load();
   })();
   </script>
 </body>
 </html>
+
 
