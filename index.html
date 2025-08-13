@@ -10,8 +10,9 @@
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
-  <!-- Supabase JS v2 (UMD) -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <!-- Supabase JS v2 (UMD) — dual CDN for reliability -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <link rel="icon" href="data:," />
   <style>
     html { scroll-behavior: smooth; }
@@ -39,7 +40,6 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 py-6">
-    <!-- Filters -->
     <section class="grid md:grid-cols-4 gap-3 mb-6">
       <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300"/>
       <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300">
@@ -58,10 +58,8 @@
       </select>
     </section>
 
-    <!-- KPIs -->
     <section id="kpis" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></section>
 
-    <!-- Table -->
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm" id="entries-table">
@@ -84,10 +82,9 @@
       </div>
     </section>
 
-    <p class="text-xs text-slate-500 mt-3">Cloud sync via Supabase. Images are stored in the <code>shots</code> bucket. Sign in to view/edit your entries.</p>
+    <p class="text-xs text-slate-500 mt-3">Cloud sync via Supabase. Images live in the <code>shots</code> bucket. Sign in to view/edit your entries.</p>
   </main>
 
-  <!-- Modal -->
   <dialog id="modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
     <form id="entry-form" method="dialog" class="p-4 sm:p-6">
       <div class="flex items-center gap-3 mb-4">
@@ -193,9 +190,20 @@
   <script>
   // ---- Config ----
   dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
-  const SUPABASE_URL = "https://hugwlxbqwgqepoxpkqyt.supabase.co"; // <-- replace
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c"; // <-- replace
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 🔐 Ensure Supabase UMD is loaded
+  if (!window.supabase) {
+    console.error("Supabase UMD script failed to load.");
+    alert("Supabase library failed to load. Check the Network tab or try disabling extensions.");
+  }
+
+  // ⬇️ Replace with your own project URL/key if different
+  const SUPABASE_URL = "https://hugwlxbqwgqepoxpkqyt.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c";
+
+  // Create client using the UMD global
+  const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (!sb) { throw new Error("Supabase client failed to initialize."); }
   let currentUser = null;
 
   // --- Helpers ---
@@ -399,7 +407,7 @@
     for (const f of files) { const url = await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url); }
   });
 
-  // Calculate R automatically if prices are filled
+  // Auto R calc
   ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
     const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
     const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
@@ -432,7 +440,9 @@
     return urls;
   }
 
-  form.addEventListener('submit', async (e)=>{
+  // Save
+  const formEl = qs('#entry-form');
+  formEl.addEventListener('submit', async (e)=>{
     e.preventDefault();
     if (!currentUser) { alert('Please sign in first.'); return; }
     const id = form.dataset.id || undefined;
@@ -565,3 +575,4 @@
   </script>
 </body>
 </html>
+
