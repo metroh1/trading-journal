@@ -4,15 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trading Journal (Cloud Sync)</title>
-  <!-- Tailwind CSS (console warning is fine) -->
+  <!-- Tailwind CSS (warning in console is expected on CDN; safe to ignore) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- dayjs for dates -->
+  <!-- dayjs UMD (available on window.dayjs) -->
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
-  <!-- Supabase JS v2 (UMD) — dual CDN for reliability; either one can load -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <link rel="icon" href="data:," />
   <style>
     html { scroll-behavior: smooth; }
@@ -40,6 +37,7 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Filters -->
     <section class="grid md:grid-cols-4 gap-3 mb-6">
       <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300"/>
       <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300">
@@ -58,8 +56,10 @@
       </select>
     </section>
 
+    <!-- KPIs -->
     <section id="kpis" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></section>
 
+    <!-- Table -->
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm" id="entries-table">
@@ -82,9 +82,10 @@
       </div>
     </section>
 
-    <p class="text-xs text-slate-500 mt-3">Cloud sync via Supabase. Images live in the <code>shots</code> bucket. Sign in to view/edit your entries.</p>
+    <p class="text-xs text-slate-500 mt-3">Cloud sync via Supabase. Images are stored in the <code>shots</code> bucket. Sign in to view/edit your entries.</p>
   </main>
 
+  <!-- Modal -->
   <dialog id="modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
     <form id="entry-form" method="dialog" class="p-4 sm:p-6">
       <div class="flex items-center gap-3 mb-4">
@@ -187,23 +188,17 @@
     <div id="lb-grid" class="p-3 grid sm:grid-cols-2 gap-3"></div>
   </dialog>
 
-  <!-- App script LAST so DOM exists and Supabase is loaded -->
-  <script>
-  (async function () {
+  <!-- App code as an ES module: import Supabase via esm.sh (CORS-friendly) -->
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
+
     // ---- Config ----
     dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
 
-    if (!window.supabase) {
-      console.error('Supabase UMD failed to load from CDNs.');
-      alert('Supabase library failed to load. Try an incognito window or another browser/network.');
-      return;
-    }
-
-    // Your Supabase project URL & anon key
     const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
 
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let currentUser = null;
 
     // --- Helpers ---
@@ -360,7 +355,6 @@
       form.reset(); thumbs.innerHTML = ''; clipboardImages.length = 0;
       qs('#date').value = data.date ? dayjs(data.date).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm');
       qs('#symbol').value = data.symbol||'';
-      qs'#direction' ;
       qs('#direction').value = data.direction||'Long';
       qs('#setup').value = data.setup||'';
       qs('#entry').value = data.entry ?? '';
@@ -388,7 +382,7 @@
     // Paste handler
     document.addEventListener('paste', (e)=>{
       if (!modal.open) return;
-      const items = Array.from(e.clipboardData.items||[]).filter(i=>i.type.startsWith('image/'));
+      const items = Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
       items.forEach(item=>{
         const file = item.getAsFile();
         const fr = new FileReader();
@@ -409,7 +403,7 @@
     });
 
     // Auto R calc
-    ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
+    ;['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
       const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
       const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
     }));
@@ -548,7 +542,7 @@
       btnLogout?.classList.toggle('hidden', !user);
     }
 
-    // 🔁 Force magic-link to return to *this exact page* (fixes 404 on GitHub Pages subpaths)
+    // Force magic-link to return to *this exact page* (fixes 404 on GitHub Pages subpaths)
     btnLogin?.addEventListener('click', async () => {
       const email = prompt('Enter your email to sign in (magic link):');
       if (!email) return;
@@ -577,7 +571,6 @@
     // Start
     await ensureSession();
     load();
-  })();
   </script>
 </body>
 </html>
