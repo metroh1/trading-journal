@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
 
-  <!-- PWA hooks -->
+  <!-- PWA hooks (scope: /trading-journal/) -->
   <link rel="manifest" href="/trading-journal/manifest.webmanifest" />
   <meta name="theme-color" content="#4f46e5" />
   <link rel="apple-touch-icon" href="/trading-journal/icons/icon-180.png" />
@@ -206,7 +206,15 @@
     const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
 
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // ✅ Persist session inside the app container (PWA or browser tab)
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: 'tj-auth'
+      }
+    });
+
     let currentUser = null;
 
     // --- Helpers ---
@@ -550,18 +558,35 @@
       btnLogout?.classList.toggle('hidden', !user);
     }
 
-    // Force magic-link to return to *this exact page*
+    // ✅ Code-based sign in flow (works inside installed PWA on iOS)
+    const EMAIL_KEY = 'tj-email';
     btnLogin?.addEventListener('click', async () => {
-      const email = prompt('Enter your email to sign in (magic link):');
+      const defaultEmail = localStorage.getItem(EMAIL_KEY) || '';
+      const email = prompt('Enter your email (we\'ll send a 6-digit code):', defaultEmail);
       if (!email) return;
+      localStorage.setItem(EMAIL_KEY, email);
+
+      // include redirect for desktop fallback
       let redirectTo = window.location.origin + window.location.pathname;
       if (!redirectTo.endsWith('/')) redirectTo += '/';
+
       const { error } = await sb.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: redirectTo }
+        options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
       });
       if (error) return alert(error.message);
-      alert('Check your email and click the magic link.');
+
+      const code = prompt('Enter the 6-digit code from your email (ignore the link):');
+      if (!code) return;
+
+      const { error: verifyErr } = await sb.auth.verifyOtp({
+        email,
+        token: code.trim(),
+        type: 'email'
+      });
+      if (verifyErr) return alert('Code verification failed: ' + verifyErr.message);
+
+      alert('Signed in!');
     });
 
     btnLogout?.addEventListener('click', async () => {
