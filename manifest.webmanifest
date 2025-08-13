@@ -1,0 +1,16 @@
+{
+  "id": "/trading-journal/",
+  "name": "Trading Journal",
+  "short_name": "Journal",
+  "description": "Fast trading journal with Supabase sync",
+  "start_url": "/trading-journal/?source=pwa",
+  "scope": "/trading-journal/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/trading-journal/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/trading-journal/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/trading-journal/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
