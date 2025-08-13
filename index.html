@@ -4,12 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trading Journal (Cloud Sync)</title>
-  <!-- Tailwind CSS (warning in console is expected on CDN; safe to ignore) -->
+
+  <!-- Tailwind (CDN warning is fine to ignore for now) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- dayjs UMD (available on window.dayjs) -->
+
+  <!-- dayjs + plugins (UMD globals: dayjs_plugin_utc / dayjs_plugin_timezone) -->
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
+
+  <!-- PWA hooks -->
+  <link rel="manifest" href="/trading-journal/manifest.webmanifest" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="apple-touch-icon" href="/trading-journal/icons/icon-180.png" />
+
   <link rel="icon" href="data:," />
   <style>
     html { scroll-behavior: smooth; }
@@ -188,7 +196,7 @@
     <div id="lb-grid" class="p-3 grid sm:grid-cols-2 gap-3"></div>
   </dialog>
 
-  <!-- App code as an ES module: import Supabase via esm.sh (CORS-friendly) -->
+  <!-- App code as an ES module -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
 
@@ -403,7 +411,7 @@
     });
 
     // Auto R calc
-    ;['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
+    ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
       const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
       const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
     }));
@@ -527,7 +535,7 @@
     qs('#lb-close').addEventListener('click', ()=> qs('#lightbox').close());
 
     // Filter handlers
-    ;['filter-search','filter-symbol','filter-direction','filter-outcome'].forEach(id=>
+    ['filter-search','filter-symbol','filter-direction','filter-outcome'].forEach(id=>
       qs('#'+id).addEventListener('input', load)
     );
 
@@ -542,7 +550,7 @@
       btnLogout?.classList.toggle('hidden', !user);
     }
 
-    // Force magic-link to return to *this exact page* (fixes 404 on GitHub Pages subpaths)
+    // Force magic-link to return to *this exact page*
     btnLogin?.addEventListener('click', async () => {
       const email = prompt('Enter your email to sign in (magic link):');
       if (!email) return;
@@ -562,7 +570,7 @@
       load();
     });
 
-    // Keep session state updated
+    // Keep session updated
     sb.auth.onAuthStateChange((_e, session) => {
       currentUser = session?.user ?? null;
       ensureSession().then(load);
@@ -571,6 +579,17 @@
     // Start
     await ensureSession();
     load();
+  </script>
+
+  <!-- PWA: register the service worker (must use your repo subpath) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/trading-journal/sw.js', { scope: '/trading-journal/' })
+          .then(r => console.log('SW registered:', r.scope))
+          .catch(err => console.error('SW registration failed:', err));
+      });
+    }
   </script>
 </body>
 </html>
