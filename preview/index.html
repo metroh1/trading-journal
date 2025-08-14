@@ -1,1 +1,687 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trading Journal — Preview (Safe Sandbox)</title>
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+
+  <!-- dayjs + plugins -->
+  <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
+  <script>dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);</script>
+
+  <!-- Chart.js for PnL line chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.5/dist/chart.umd.min.js"></script>
+
+  <!-- NOTE: No manifest or service worker in preview to avoid conflicts with your installed app -->
+
+  <style>
+    html { scroll-behavior: smooth; }
+    .dropzone-dashed { border: 2px dashed rgb(209 213 219); }
+    .thumb { max-height: 128px; }
+    .tab-btn[aria-selected="true"] { background: rgb(226 232 240); color: rgb(15 23 42); }
+    .dark .tab-btn[aria-selected="true"] { background: rgb(30 41 59); color: white; }
+  </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+  <!-- Top bar -->
+  <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="h-8 w-8 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">TJ</div>
+      <h1 class="text-xl font-semibold">Trading Journal (Preview)</h1>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="btn-theme" class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700" title="Toggle dark mode">🌓</button>
+        <button id="btn-login" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white">Sign in</button>
+        <button id="btn-logout" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hidden">Sign out</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <nav class="max-w-7xl mx-auto px-4 pb-3 flex gap-2">
+      <button class="tab-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800" data-tab="journal" aria-selected="true">Journal</button>
+      <button class="tab-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800" data-tab="calendar">Calendar</button>
+      <button class="tab-btn px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- FILTERS ROW -->
+    <section class="grid md:grid-cols-5 gap-3 mb-6">
+      <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+      <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <option value="">All Symbols</option>
+      </select>
+      <select id="filter-direction" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <option value="">All Directions</option>
+        <option>Long</option>
+        <option>Short</option>
+      </select>
+      <select id="filter-outcome" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <option value="">All Outcomes</option>
+        <option>Win</option>
+        <option>Loss</option>
+        <option>BE</option>
+      </select>
+      <select id="filter-type" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <option value="">All Types</option>
+        <option>Live</option>
+        <option>Backtest</option>
+      </select>
+    </section>
+
+    <!-- JOURNAL TAB -->
+    <section id="tab-journal" class="tab">
+      <!-- Desktop table -->
+      <section class="hidden md:block bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm" id="entries-table">
+            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase text-xs">
+              <tr>
+                <th class="text-left px-4 py-3">Date</th>
+                <th class="text-left px-4 py-3">Symbol</th>
+                <th class="text-left px-4 py-3">Dir</th>
+                <th class="text-left px-4 py-3">Setup</th>
+                <th class="text-right px-4 py-3">R</th>
+                <th class="text-left px-4 py-3">Outcome</th>
+                <th class="text-left px-4 py-3">Tags</th>
+                <th class="text-left px-4 py-3">Notes</th>
+                <th class="text-left px-4 py-3">Shots</th>
+                <th class="text-left px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="entries-body" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Mobile cards -->
+      <section id="cards" class="md:hidden grid gap-3"></section>
+
+      <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">Tip: On iPhone you can take a screenshot and paste it directly in the form.</div>
+    </section>
+
+    <!-- DASHBOARD TAB -->
+    <section id="tab-dashboard" class="tab hidden">
+      <div id="kpis" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+        <h3 class="font-semibold mb-3">Cumulative R Curve</h3>
+        <canvas id="pnlChart" height="120"></canvas>
+      </div>
+    </section>
+
+    <!-- CALENDAR TAB -->
+    <section id="tab-calendar" class="tab hidden">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold" id="cal-title">Month YYYY</div>
+          <div class="space-x-2">
+            <button id="cal-prev" class="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800">Prev</button>
+            <button id="cal-today" class="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800">Today</button>
+            <button id="cal-next" class="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800">Next</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-xs text-slate-500 mb-1">
+          <div class="text-center">Sun</div><div class="text-center">Mon</div><div class="text-center">Tue</div><div class="text-center">Wed</div><div class="text-center">Thu</div><div class="text-center">Fri</div><div class="text-center">Sat</div>
+        </div>
+        <div id="cal-grid" class="grid grid-cols-7 gap-1"></div>
+      </div>
+      <div id="cal-day-list" class="mt-4"></div>
+    </section>
+
+    <!-- SETTINGS TAB -->
+    <section id="tab-settings" class="tab hidden">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+        <h3 class="font-semibold mb-3">Preferences</h3>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium">Default Trade Type</label>
+            <select id="pref-type" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Live</option>
+              <option>Backtest</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium">Default Session</label>
+            <select id="pref-session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>NY</option>
+              <option>London</option>
+              <option>Asia</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Floating Action Button (mobile) -->
+  <button id="fab-new" class="md:hidden fixed bottom-5 right-5 p-4 rounded-full shadow-lg bg-indigo-600 text-white focus:outline-none">＋</button>
+
+  <!-- Modal: fast entry with selectors -->
+  <dialog id="modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-xl">
+    <form id="entry-form" method="dialog" class="p-4 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl">
+      <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-lg font-semibold">New Journal Entry</h2>
+        <button type="submit" class="ml-auto px-3 py-1.5 rounded-xl bg-indigo-600 text-white">Save</button>
+        <button type="button" id="btn-cancel" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">Cancel</button>
+      </div>
+
+      <div class="grid gap-3">
+        <label class="text-sm">Date/Time
+          <input id="date" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+        </label>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm">Trade Type
+            <select id="tradeType" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Live</option>
+              <option>Backtest</option>
+            </select>
+          </label>
+          <label class="text-sm">Session
+            <select id="session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>NY</option>
+              <option>London</option>
+              <option>Asia</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm">Symbol
+            <select id="symbolSelect" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"></select>
+          </label>
+          <label class="text-sm">Direction
+            <select id="direction" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Long</option>
+              <option>Short</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="text-sm">Confluences (multi-select)
+          <select id="confluences" multiple class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 h-28">
+            <option>FVG Continuation</option>
+            <option>IFVG</option>
+            <option>Breaker</option>
+            <option>Liquidity Sweep</option>
+            <option>Order Block</option>
+            <option>Equal Highs</option>
+            <option>Equal Lows</option>
+            <option>Displacement</option>
+            <option>Fair Value Gap</option>
+            <option>Reclaim</option>
+          </select>
+        </label>
+
+        <div class="grid grid-cols-3 gap-2">
+          <label class="text-sm">Entry
+            <input id="entry" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+          </label>
+          <label class="text-sm">Stop
+            <input id="stop" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+          </label>
+          <label class="text-sm">Exit
+            <input id="exit" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+          </label>
+        </div>
+        <label class="text-sm">R Multiple (auto if prices given)
+          <input id="rMultiple" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+        </label>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm">Outcome
+            <select id="outcome" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Win</option>
+              <option>Loss</option>
+              <option>BE</option>
+            </select>
+          </label>
+          <label class="text-sm">Tags (comma separated)
+            <input id="tags" placeholder="optional tags" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+          </label>
+        </div>
+
+        <label class="text-sm">Notes
+          <textarea id="notes" rows="3" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" placeholder="Quick thoughts..."></textarea>
+        </label>
+
+        <div class="grid gap-2">
+          <div id="dropzone" class="dropzone-dashed rounded-2xl bg-slate-50 dark:bg-slate-900 p-4 text-center text-slate-500">
+            <p class="mb-2 font-medium">Screenshots</p>
+            <p class="text-xs mb-2">Tap to select, or paste while this is open</p>
+            <input id="file-input" type="file" accept="image/*" multiple capture="environment" class="hidden" />
+            <div id="thumbs" class="mt-3 grid grid-cols-3 gap-2"></div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="row-template">
+    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800">
+      <td class="px-4 py-3 align-top date"></td>
+      <td class="px-4 py-3 align-top symbol font-medium"></td>
+      <td class="px-4 py-3 align-top direction"></td>
+      <td class="px-4 py-3 align-top setup"></td>
+      <td class="px-4 py-3 align-top text-right r"></td>
+      <td class="px-4 py-3 align-top outcome"></td>
+      <td class="px-4 py-3 align-top tags text-xs"></td>
+      <td class="px-4 py-3 align-top notes max-w-[28ch] truncate"></td>
+      <td class="px-4 py-3 align-top shots text-xs"></td>
+      <td class="px-4 py-3 align-top">
+        <button class="btn-view px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 mr-1">View</button>
+        <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white mr-1">Edit</button>
+        <button class="btn-del px-2 py-1 rounded-lg bg-rose-600 text-white">Delete</button>
+      </td>
+    </tr>
+  </template>
+
+  <dialog id="lightbox" class="rounded-2xl backdrop:bg-black/60 w-full max-w-4xl">
+    <div class="p-3 flex items-center gap-3 bg-white dark:bg-slate-900 rounded-t-2xl">
+      <div class="font-medium">Screenshots</div>
+      <button id="lb-close" class="ml-auto px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">Close</button>
+    </div>
+    <div id="lb-grid" class="p-3 grid sm:grid-cols-2 gap-3 bg-white dark:bg-slate-900"></div>
+  </dialog>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
+
+    // ---- Supabase client with persisted session ----
+    const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
+
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'tj-auth' }
+    });
+
+    let currentUser = null;
+
+    // ---------- Utils ----------
+    const qs = (s, el=document) => el.querySelector(s);
+    const qsa = (s, el=document) => Array.from(el.querySelectorAll(s));
+    const fmt = (d) => dayjs(d).format('YYYY-MM-DD HH:mm');
+    function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+    function calcR(entry, stop, exit) {
+      if (!entry || !stop || !exit) return null; const risk = Math.abs(entry - stop); if (!risk) return null; const reward = Math.abs(exit - entry);
+      return +(reward / risk * (exit > entry ? (entry > stop ? 1 : -1) : (entry < stop ? 1 : -1))).toFixed(2);
+    }
+
+    function computeStats(rows){
+      const n = rows.length;
+      const wins = rows.filter(r=>r.outcome==='Win');
+      const losses = rows.filter(r=>r.outcome==='Loss');
+      const be = rows.filter(r=>r.outcome==='BE');
+      const rSum = rows.reduce((s,r)=> s + (Number(r.rMultiple)||0), 0);
+      const grossWin = wins.reduce((s,r)=> s + (Number(r.rMultiple)||0), 0);
+      const grossLossAbs = Math.abs(losses.reduce((s,r)=> s + (Number(r.rMultiple)||0), 0));
+      const pf = grossLossAbs > 0 ? (grossWin / grossLossAbs) : (wins.length?Infinity:0);
+      const avgR = n ? rSum/n : 0;
+      const wr = (wins.length / (wins.length + losses.length || 1)) * 100;
+      const best = rows.reduce((m,r)=> Math.max(m, Number(r.rMultiple)||-Infinity), -Infinity);
+      const worst = rows.reduce((m,r)=> Math.min(m, Number(r.rMultiple)||Infinity), Infinity);
+      return {n, wr: Math.round(wr), rSum:+rSum.toFixed(2), avgR:+avgR.toFixed(2), pf: isFinite(pf)?+pf.toFixed(2):'∞', best:isFinite(best)?best:0, worst:isFinite(worst)?worst:0, wins:wins.length, losses:losses.length, be:be.length};
+    }
+
+    function renderKPIs(rows){
+      const {n,wr,rSum,avgR,pf,best,worst,wins,losses,be} = computeStats(rows);
+      const card=(label,val,sub='')=>`<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4"><div class="text-xs uppercase text-slate-500 dark:text-slate-400">${label}</div><div class="text-2xl font-semibold">${val}</div>${sub?`<div class='text-xs text-slate-500 dark:text-slate-400 mt-1'>${sub}</div>`:''}</div>`;
+      qs('#kpis').innerHTML=[
+        card('Total Trades', n, `${wins}W / ${losses}L / ${be}BE`),
+        card('Win Rate', wr+'%'),
+        card('Total R', rSum),
+        card('Avg R/Trade', avgR),
+        card('Profit Factor', pf),
+        card('Best R', best),
+        card('Worst R', worst)
+      ].join('');
+    }
+
+    function uniqueSymbols(rows){ return Array.from(new Set(rows.map(r=>r.symbol).filter(Boolean))).sort(); }
+    function renderSymbolFilter(rows){
+      const sel = qs('#filter-symbol');
+      const opts = ['<option value="">All Symbols</option>'].concat(uniqueSymbols(rows).map(s=>`<option>${s}</option>`)).join('');
+      sel.innerHTML = opts;
+      // also populate the entry symbol select (prepend Custom...)
+      const es = qs('#symbolSelect');
+      es.innerHTML = ['<option value="__custom">Custom…</option>'].concat(uniqueSymbols(rows).map(s=>`<option>${s}</option>`)).join('');
+    }
+
+    // ---------- Data access ----------
+    async function getEntries(){
+      if (!currentUser) return [];
+      const { data, error } = await sb.from('entries').select('*').order('date', { ascending: false });
+      if (error) { console.error(error); return []; }
+      return data.map(row=>({
+        id: row.id,
+        date: row.date,
+        symbol: row.symbol,
+        direction: row.direction,
+        setup: row.setup,
+        entry: row.entry,
+        stop: row.stop,
+        exit: row.exit,
+        rMultiple: row.r_multiple,
+        outcome: row.outcome,
+        session: row.session,
+        tags: row.tags||[],
+        notes: row.notes,
+        images: row.images||[]
+      }));
+    }
+
+    async function upsertEntry(rec){
+      const payload = {
+        id: rec.id || undefined,
+        user_id: currentUser.id,
+        date: rec.date,
+        symbol: rec.symbol,
+        direction: rec.direction,
+        setup: rec.setup,
+        entry: rec.entry,
+        stop: rec.stop,
+        exit: rec.exit,
+        r_multiple: rec.rMultiple,
+        outcome: rec.outcome,
+        session: rec.session,
+        tags: rec.tags,
+        notes: rec.notes,
+        images: rec.images
+      };
+      const { error } = await sb.from('entries').upsert(payload).select();
+      if (error) throw error;
+    }
+
+    async function deleteEntry(id){
+      const { error } = await sb.from('entries').delete().eq('id', id);
+      if (error) throw error;
+    }
+
+    // ---------- Rendering ----------
+    function makeRow(r){
+      const tpl = qs('#row-template').content.cloneNode(true);
+      tpl.querySelector('.date').textContent = fmt(r.date);
+      tpl.querySelector('.symbol').textContent = r.symbol;
+      tpl.querySelector('.direction').textContent = r.direction;
+      tpl.querySelector('.setup').textContent = r.setup || '';
+      tpl.querySelector('.r').textContent = r.rMultiple ?? '';
+      tpl.querySelector('.outcome').textContent = r.outcome || '';
+      tpl.querySelector('.tags').textContent = (r.tags||[]).join(', ');
+      tpl.querySelector('.notes').textContent = r.notes || '';
+      tpl.querySelector('.shots').textContent = r.images?.length ? `${r.images.length} shot${r.images.length>1?'s':''}` : '';
+      const tr = tpl.querySelector('tr');
+      tr.dataset.id = r.id;
+      tr.querySelector('.btn-del').addEventListener('click', async ()=>{ if (!confirm('Delete this entry?')) return; try { await deleteEntry(r.id); await load(); } catch(e){ alert(e.message); } });
+      tr.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
+      tr.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
+      return tr;
+    }
+
+    function makeCard(r){
+      const wrap = document.createElement('div');
+      wrap.className = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4';
+      wrap.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="text-sm text-slate-500">${fmt(r.date)}</div>
+          <div class="ml-auto flex gap-2">
+            <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white">Edit</button>
+            <button class="btn-del px-2 py-1 rounded-lg bg-rose-600 text-white">Delete</button>
+          </div>
+        </div>
+        <div class="mt-2 flex items-center gap-3">
+          <div class="text-lg font-semibold">${r.symbol}</div>
+          <div class="px-2 py-0.5 rounded-lg text-xs border ${r.direction==='Long'?'border-emerald-500 text-emerald-600':'border-rose-500 text-rose-600'}">${r.direction}</div>
+          <div class="px-2 py-0.5 rounded-lg text-xs border border-slate-300 dark:border-slate-700">${r.outcome||''}</div>
+          <div class="ml-auto text-right"><div class="text-xs text-slate-500">R</div><div class="text-lg font-semibold">${r.rMultiple ?? ''}</div></div>
+        </div>
+        <div class="mt-2 text-sm"><span class="font-medium">Setup:</span> ${r.setup||''}</div>
+        ${r.tags?.length?`<div class='mt-1 text-xs text-slate-500'>${r.tags.map(t=>`<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">${t}</span>`).join('')}</div>`:''}
+        ${r.notes?`<div class='mt-2 text-sm text-slate-700 dark:text-slate-300'>${r.notes}</div>`:''}
+        ${r.images?.length?`<div class='mt-3 grid grid-cols-3 gap-2'>${r.images.map(src=>`<img src="${src}" class="w-full h-24 object-cover rounded-xl border border-slate-200 dark:border-slate-800"/>`).join('')}</div>`:''}
+      `;
+      wrap.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
+      wrap.querySelector('.btn-del').addEventListener('click', async ()=>{ if (!confirm('Delete this entry?')) return; try { await deleteEntry(r.id); await load(); } catch(e){ alert(e.message); } });
+      return wrap;
+    }
+
+    function applyFilters(rows){
+      const q = qs('#filter-search').value.trim().toLowerCase();
+      const sym = qs('#filter-symbol').value; const dir = qs('#filter-direction').value; const out = qs('#filter-outcome').value; const type = qs('#filter-type').value;
+      return rows.filter(r=>{
+        if (sym && r.symbol !== sym) return false;
+        if (dir && r.direction !== dir) return false;
+        if (out && r.outcome !== out) return false;
+        if (type && !(r.tags||[]).includes(type)) return false; // type is stored as a tag
+        if (q){ const hay = [r.symbol, r.setup, r.notes, (r.tags||[]).join(' ')].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+        return true;
+      });
+    }
+
+    async function load(){
+      if (!currentUser){
+        qs('#entries-body').innerHTML = ''; qs('#cards').innerHTML=''; qs('#kpis').innerHTML=''; renderCalendar([]); return;
+      }
+      const all = await getEntries();
+      renderSymbolFilter(all);
+      const rows = applyFilters(all);
+
+      // table
+      const tbody = qs('#entries-body'); tbody.innerHTML = ''; rows.forEach(r=> tbody.appendChild(makeRow(r)));
+      // cards (mobile)
+      const cards = qs('#cards'); cards.innerHTML = ''; rows.forEach(r=> cards.appendChild(makeCard(r)));
+      // KPIs + chart
+      renderKPIs(rows);
+      drawPnL(rows);
+      // calendar
+      renderCalendar(all);
+    }
+
+    // ---------- PnL Chart ----------
+    let pnlChart;
+    function drawPnL(rows){
+      const sorted = [...rows].sort((a,b)=> new Date(a.date)-new Date(b.date));
+      let cum = 0; const labels = []; const data = [];
+      for (const r of sorted){
+        cum += Number(r.rMultiple)||0; labels.push(dayjs(r.date).format('MMM D')); data.push(+cum.toFixed(2));
+      }
+      const ctx = qs('#pnlChart'); if (!ctx) return;
+      pnlChart?.destroy();
+      pnlChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label:'Cumulative R', data, tension: 0.25, fill: false }] }, options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxRotation: 0 } }, y: { beginAtZero: true } } } });
+    }
+
+    // ---------- Calendar ----------
+    let calYear = dayjs().year(), calMonth = dayjs().month();
+    function renderCalendar(all){
+      const title = dayjs().year(calYear).month(calMonth).date(1);
+      qs('#cal-title').textContent = title.format('MMMM YYYY');
+      const start = title.startOf('month');
+      const daysInMonth = title.daysInMonth();
+      const startOffset = start.day(); // 0..6 Sun..Sat
+
+      const grid = qs('#cal-grid'); grid.innerHTML = '';
+      for (let i=0;i<startOffset;i++){ const d=document.createElement('div'); d.className='h-16'; grid.appendChild(d); }
+
+      const totalsByDay = {};
+      for (const r of all){ const d = dayjs(r.date); const key = d.format('YYYY-MM-DD'); totalsByDay[key] = (totalsByDay[key]||0) + (Number(r.rMultiple)||0); }
+
+      for (let day=1; day<=daysInMonth; day++){
+        const date = title.date(day);
+        const key = date.format('YYYY-MM-DD');
+        const total = +(totalsByDay[key]||0).toFixed(2);
+        const el = document.createElement('button');
+        el.className = 'h-16 rounded-xl border border-slate-200 dark:border-slate-800 p-2 text-left bg-white dark:bg-slate-900 hover:border-indigo-400';
+        el.innerHTML = `<div class='text-xs text-slate-500 dark:text-slate-400'>${day}</div>
+                        <div class='mt-1 text-sm ${total>0?'text-emerald-600': total<0?'text-rose-600':'text-slate-500'}'>${total? (total>0?'+':'')+total : ''}</div>`;
+        el.addEventListener('click', ()=> showDay(all, key));
+        grid.appendChild(el);
+      }
+    }
+
+    function showDay(all, ymd){
+      const list = qs('#cal-day-list');
+      const rows = all.filter(r=> dayjs(r.date).format('YYYY-MM-DD') === ymd);
+      list.innerHTML = `<div class='font-semibold mb-2'>${dayjs(ymd).format('MMM D, YYYY')}</div>` + (rows.length? '':'<div class="text-sm text-slate-500">No trades.</div>');
+      rows.forEach(r=> list.appendChild(makeCard(r)));
+      // switch to Journal tab view scrolled to list
+      selectTab('calendar');
+      list.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ---------- Modal / Form ----------
+    const modal = qs('#modal');
+    const form = qs('#entry-form');
+    const fileInput = qs('#file-input');
+    const thumbs = qs('#thumbs');
+    const clipboardImages = [];
+
+    function resetForm(data={}){
+      form.reset(); thumbs.innerHTML=''; clipboardImages.length=0;
+      qs('#date').value = data.date ? dayjs(data.date).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm');
+      qs('#tradeType').value = localStorage.getItem('tj-pref-type') || data.tradeType || 'Live';
+      qs('#session').value = localStorage.getItem('tj-pref-session') || data.session || 'NY';
+
+      // symbol select
+      const es = qs('#symbolSelect');
+      const cur = data.symbol || es.value || '__custom';
+      es.value = cur;
+      if (cur === '__custom'){
+        // no-op; on submit we'll prompt for custom symbol if still __custom
+      }
+
+      // direction/outcome
+      qs('#direction').value = data.direction || 'Long';
+      qs('#outcome').value = data.outcome || 'Win';
+
+      // confluences -> setup
+      const confSel = qs('#confluences');
+      Array.from(confSel.options).forEach(o=> o.selected = false);
+      if (data.setup){
+        const parts = data.setup.split(/,\s*/);
+        Array.from(confSel.options).forEach(o=>{ if (parts.includes(o.text)) o.selected = true; });
+      }
+
+      // prices / r
+      qs('#entry').value = data.entry ?? '';
+      qs('#stop').value = data.stop ?? '';
+      qs('#exit').value = data.exit ?? '';
+      qs('#rMultiple').value = data.rMultiple ?? '';
+
+      // tags + notes
+      qs('#tags').value = (data.tags||[]).filter(t=> t!=='Live' && t!=='Backtest').join(', ');
+      qs('#notes').value = data.notes || '';
+
+      // shots
+      if (data.images?.length) data.images.forEach(addThumbUrl);
+      form.dataset.id = data.id || '';
+    }
+
+    function openModal(data){ resetForm(data||{}); modal.showModal(); }
+
+    function addThumbUrl(url){ const img=document.createElement('img'); img.src=url; img.className='thumb w-full h-24 object-cover rounded-xl border border-slate-200 dark:border-slate-800'; thumbs.appendChild(img); }
+    function fileToDataUrl(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+
+    document.addEventListener('paste', (e)=>{
+      if (!modal.open) return; const items = Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
+      items.forEach(item=>{ const file=item.getAsFile(); const fr=new FileReader(); fr.onload=()=>{ clipboardImages.push(fr.result); addThumbUrl(fr.result); }; fr.readAsDataURL(file); });
+    });
+
+    const dz = qs('#dropzone');
+    dz.addEventListener('click', ()=> fileInput.click());
+    dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('ring-2','ring-indigo-500'); });
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('ring-2','ring-indigo-500'));
+    dz.addEventListener('drop', async (e)=>{ e.preventDefault(); dz.classList.remove('ring-2','ring-indigo-500'); const files=Array.from(e.dataTransfer.files||[]).filter(f=>f.type.startsWith('image/')); for (const f of files){ const url=await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url);} });
+
+    // auto R
+    ;['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{ const v=(id)=>parseFloat(qs('#'+id).value); const r=calcR(v('entry'),v('stop'),v('exit')); if (r!=null) qs('#rMultiple').value=r; }));
+
+    async function uploadDataUrlToStorage(dataUrl){ const res=await fetch(dataUrl); const blob=await res.blob(); const ext=blob.type.split('/')[1]||'png'; const path=`${currentUser.id}/${uid()}.${ext}`; const {error}=await sb.storage.from('shots').upload(path, blob, {contentType: blob.type, upsert:false}); if (error) throw error; const {data}=sb.storage.from('shots').getPublicUrl(path); return data.publicUrl; }
+
+    async function gatherImages(){ if (!currentUser) return []; const urls=[]; const files=Array.from(fileInput.files||[]); for (const f of files){ const ext=(f.type.split('/')[1]||'png'); const path=`${currentUser.id}/${uid()}.${ext}`; const {error}=await sb.storage.from('shots').upload(path, f, {contentType: f.type, upsert:false}); if (error) throw error; const {data}=sb.storage.from('shots').getPublicUrl(path); urls.push(data.publicUrl);} for (const d of clipboardImages){ urls.push(await uploadDataUrlToStorage(d)); } return urls; }
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault(); if (!currentUser) { alert('Please sign in first.'); return; }
+      // symbol from select, allow custom
+      let symbol = qs('#symbolSelect').value; if (symbol==='__custom'){ symbol = prompt('Enter symbol (e.g., NQ1!, ES, EURUSD):')?.trim() || ''; }
+      const conf = Array.from(qs('#confluences').selectedOptions).map(o=>o.text);
+      const type = qs('#tradeType').value; // Live/Backtest
+      const extraTags = qs('#tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const tags = [type, ...conf, ...extraTags];
+      const rec = {
+        id: form.dataset.id || undefined,
+        date: new Date(qs('#date').value).toISOString(),
+        symbol,
+        direction: qs('#direction').value,
+        setup: conf.join(', '), // store choices in setup
+        entry: parseFloat(qs('#entry').value)||null,
+        stop: parseFloat(qs('#stop').value)||null,
+        exit: parseFloat(qs('#exit').value)||null,
+        rMultiple: parseFloat(qs('#rMultiple').value)||null,
+        outcome: qs('#outcome').value,
+        session: qs('#session').value,
+        tags,
+        notes: qs('#notes').value.trim(),
+        images: []
+      };
+      try{ const images=await gatherImages(); rec.images = images; await upsertEntry(rec); modal.close(); await load(); } catch(err){ alert('Save failed: '+err.message); }
+    });
+
+    qs('#btn-cancel').addEventListener('click', ()=> modal.close());
+    qs('#fab-new').addEventListener('click', ()=> openModal());
+
+    // ---------- Lightbox ----------
+    function openLightbox(imgs){ const lb=qs('#lightbox'); const grid=qs('#lb-grid'); grid.innerHTML=imgs.map(src=>`<img src="${src}" class="w-full rounded-xl border border-slate-200 dark:border-slate-800"/>`).join(''); lb.showModal(); }
+    qs('#lb-close').addEventListener('click', ()=> qs('#lightbox').close());
+
+    // ---------- Filters ----------
+    ;['filter-search','filter-symbol','filter-direction','filter-outcome','filter-type'].forEach(id=> qs('#'+id).addEventListener('input', load));
+
+    // ---------- Tabs ----------
+    function selectTab(name){ qsa('.tab-btn').forEach(b=> b.setAttribute('aria-selected', b.dataset.tab===name)); qsa('.tab').forEach(s=> s.classList.toggle('hidden', s.id!==`tab-${name}`)); }
+    qsa('.tab-btn').forEach(btn=> btn.addEventListener('click', ()=> selectTab(btn.dataset.tab)));
+
+    // ---------- Theme ----------
+    function applyTheme(t){ document.documentElement.classList.toggle('dark', t==='dark'); localStorage.setItem('tj-theme', t); }
+    const savedTheme = localStorage.getItem('tj-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(savedTheme);
+    qs('#btn-theme').addEventListener('click', ()=> applyTheme(document.documentElement.classList.contains('dark')?'light':'dark'));
+
+    // ---------- Settings ----------
+    qs('#pref-type').value = localStorage.getItem('tj-pref-type') || 'Live';
+    qs('#pref-session').value = localStorage.getItem('tj-pref-session') || 'NY';
+    qs('#pref-type').addEventListener('change', e=> localStorage.setItem('tj-pref-type', e.target.value));
+    qs('#pref-session').addEventListener('change', e=> localStorage.setItem('tj-pref-session', e.target.value));
+
+    // ---------- Auth ----------
+    const btnLogin = qs('#btn-login'); const btnLogout = qs('#btn-logout');
+    async function ensureSession(){ const { data: { user } } = await sb.auth.getUser(); currentUser = user; btnLogin?.classList.toggle('hidden', !!user); btnLogout?.classList.toggle('hidden', !user); }
+    const EMAIL_KEY='tj-email';
+    btnLogin?.addEventListener('click', async ()=>{
+      const defaultEmail = localStorage.getItem(EMAIL_KEY)||'';
+      const email = prompt('Enter your email (we\'ll send a 6-digit code):', defaultEmail);
+      if (!email) return; localStorage.setItem(EMAIL_KEY, email);
+      // redirect as fallback only (not used for code flow)
+      let redirectTo = window.location.origin + window.location.pathname; if (!redirectTo.endsWith('/')) redirectTo += '/';
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true } });
+      if (error) return alert(error.message);
+      const code = prompt('Enter the 6-digit code from your email (ignore the link):'); if (!code) return;
+      const { error: verifyErr } = await sb.auth.verifyOtp({ email, token: code.trim(), type: 'email' });
+      if (verifyErr) return alert('Code verification failed: ' + verifyErr.message);
+      alert('Signed in!');
+    });
+    btnLogout?.addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser=null; await load(); });
+    sb.auth.onAuthStateChange((_e, session)=>{ currentUser = session?.user ?? null; ensureSession().then(load); });
+
+    // ---------- Init ----------
+    await ensureSession();
+    await load();
+  </script>
+</body>
+</html>
 
