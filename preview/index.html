@@ -3,21 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trading Journal — Preview</title>
+  <title>Trading Journal</title>
 
-  <!-- Tailwind (CDN warning in console is fine) -->
+  <!-- Tailwind (CDN; warning in console is OK for now) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- dayjs + plugins (globals) -->
+  <!-- dayjs + plugins (UMD globals: dayjs_plugin_utc, dayjs_plugin_timezone) -->
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
 
+  <!-- PWA hooks (scoped to your GitHub Pages subpath) -->
+  <link rel="manifest" href="/trading-journal/manifest.webmanifest" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="apple-touch-icon" href="/trading-journal/icons/icon-180.png" />
+
+  <link rel="icon" href="data:," />
   <style>
     html { scroll-behavior: smooth; }
     .dropzone-dashed { border: 2px dashed rgb(209 213 219); }
     .thumb { max-height: 120px; }
-    /* Mobile bottom nav safe-area padding */
     @supports(padding: max(0px)) {
       .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), .75rem); }
     }
@@ -28,18 +33,28 @@
   <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
       <div class="h-8 w-8 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">TJ</div>
-      <h1 class="text-lg sm:text-xl font-semibold">Trading Journal — Preview</h1>
-      <div class="ml-auto flex items-center gap-2">
-        <button id="btn-theme" class="px-3 py-1.5 rounded-xl bg-slate-200">Dark</button>
-        <div class="w-px h-6 bg-slate-200"></div>
+      <h1 class="text-lg sm:text-xl font-semibold">Trading Journal</h1>
+      <div class="ml-auto hidden md:flex items-center gap-2">
+        <button id="btn-new-desktop" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">New Entry</button>
+        <button id="btn-export" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900">Export</button>
+        <label class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 cursor-pointer">
+          <input id="file-import" type="file" accept="application/json" class="hidden" />Import
+        </label>
+        <button id="btn-clear" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700" title="Clear ALL data in your account">Reset</button>
+        <div class="w-px h-6 bg-slate-200 mx-2"></div>
         <button id="btn-login" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white">Sign in</button>
         <button id="btn-logout" class="px-3 py-1.5 rounded-xl bg-slate-200 hidden">Sign out</button>
+      </div>
+      <!-- Compact header actions on mobile -->
+      <div class="ml-auto md:hidden flex items-center gap-2">
+        <button id="btn-login-m" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white">Sign in</button>
+        <button id="btn-logout-m" class="px-3 py-1.5 rounded-xl bg-slate-200 hidden">Out</button>
       </div>
     </div>
   </header>
 
-  <!-- Top KPI strip (always visible) -->
-  <section id="kpi-strip" class="max-w-7xl mx-auto px-4 py-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+  <!-- KPI strip -->
+  <section id="kpi-strip" class="max-w-7xl mx-auto px-4 py-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
     <!-- filled by JS -->
   </section>
 
@@ -53,7 +68,6 @@
     </div>
   </nav>
 
-  <!-- Main -->
   <main class="max-w-7xl mx-auto px-4 pb-28">
     <!-- JOURNAL -->
     <section id="tab-journal" class="tabview">
@@ -81,11 +95,11 @@
         </select>
       </div>
 
-      <!-- Journal extras ribbon -->
+      <!-- Journal ribbon -->
       <div class="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="bg-white border border-slate-200 rounded-2xl p-4">
           <div class="text-xs uppercase text-slate-500">This Week</div>
-          <div id="r-week" class="text-2xl font-semibold">0.0 R</div>
+          <div id="r-week" class="text-2xl font-semibold">0.00 R</div>
           <div id="r-week-detail" class="text-xs text-slate-500 mt-1"></div>
         </div>
         <div class="bg-white border border-slate-200 rounded-2xl p-4">
@@ -94,17 +108,17 @@
           <div id="streak-detail" class="text-xs text-slate-500 mt-1"></div>
         </div>
         <div class="bg-white border border-slate-200 rounded-2xl p-4">
-          <div class="text-xs uppercase text-slate-500">Avg Session Time</div>
+          <div class="text-xs uppercase text-slate-500">Avg Session</div>
           <div id="avg-session" class="text-2xl font-semibold">–</div>
-          <div class="text-xs text-slate-500 mt-1">NY/London/Asia mix</div>
+          <div class="text-xs text-slate-500 mt-1">NY / London / Asia</div>
         </div>
         <div class="bg-white border border-slate-200 rounded-2xl p-4">
           <div class="text-xs uppercase text-slate-500">Quick Filters</div>
           <div class="flex flex-wrap gap-2 mt-2 text-xs">
-            <button class="chip" data-q="tags:Live">Live</button>
-            <button class="chip" data-q="tags:Backtest">Backtest</button>
-            <button class="chip" data-q="setup:FVG Continuation">FVG Cont.</button>
-            <button class="chip" data-q="setup:IFVG">IFVG</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100" data-q="tags:Live">Live</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100" data-q="tags:Backtest">Backtest</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100" data-q="setup:FVG Continuation">FVG Cont.</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100" data-q="setup:IFVG">IFVG</button>
           </div>
         </div>
       </div>
@@ -134,7 +148,7 @@
         <div id="cards" class="md:hidden divide-y divide-slate-100"></div>
       </section>
 
-      <p class="text-xs text-slate-500 mt-3">Preview build. Your live app remains unchanged.</p>
+      <div class="mt-3 text-xs text-slate-500">Images are stored in the <code>shots</code> bucket. Sign in to view/edit.</div>
     </section>
 
     <!-- DASHBOARD -->
@@ -188,9 +202,29 @@
             </select>
           </label>
         </div>
+
+        <div class="mt-6 text-sm font-medium mb-2">Data</div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-new-settings" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white">New Entry</button>
+          <button id="btn-export-settings" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white">Export</button>
+          <label class="px-3 py-1.5 rounded-xl bg-slate-200 cursor-pointer">
+            <input id="file-import-settings" type="file" accept="application/json" class="hidden" />Import
+          </label>
+          <button id="btn-clear-settings" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white">Reset</button>
+        </div>
       </div>
     </section>
   </main>
+
+  <!-- Bottom nav (mobile) -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-slate-200">
+    <div class="max-w-7xl mx-auto grid grid-cols-4 text-center text-xs">
+      <button class="bn px-3 py-2" data-tab="journal">Journal</button>
+      <button class="bn px-3 py-2" data-tab="dashboard">Dashboard</button>
+      <button class="bn px-3 py-2" data-tab="calendar">Calendar</button>
+      <button class="bn px-3 py-2" data-tab="settings">Settings</button>
+    </div>
+  </nav>
 
   <!-- Floating New button (mobile) -->
   <button id="btn-new" class="md:hidden fixed bottom-16 right-5 safe-bottom rounded-full h-14 w-14 bg-indigo-600 text-white shadow-lg text-3xl leading-[3.3rem] text-center">＋</button>
@@ -292,13 +326,13 @@
             <input id="file-input" type="file" accept="image/*" multiple class="hidden" />
             <div id="thumbs" class="mt-3 grid grid-cols-3 gap-2"></div>
           </div>
-          <div class="text-xs text-slate-500">On iPhone, use the share sheet screenshot → **Copy** → then paste here.</div>
+          <div class="text-xs text-slate-500">Tip: On iPhone, take a screenshot → Copy → paste here.</div>
         </div>
       </div>
     </form>
   </dialog>
 
-  <!-- Day modal -->
+  <!-- Day modal (calendar) -->
   <dialog id="day-modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
     <div class="p-4 sm:p-6">
       <div class="flex items-center gap-3 mb-2">
@@ -309,55 +343,40 @@
     </div>
   </dialog>
 
-  <!-- App (ESM) -->
+  <!-- App (ES module) -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
     import Chart from 'https://esm.sh/chart.js@4.4.2/auto';
 
-    // Config
+    // ---- Config ----
     dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
     const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
+
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'tj-auth-preview' }
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'tj-auth' }
     });
+
     let currentUser = null;
 
-    // DOM helpers
+    // ---- Helpers ----
     const qs = (s, el=document) => el.querySelector(s);
     const qsa = (s, el=document) => Array.from(el.querySelectorAll(s));
-    const $tabs = qsa('.tab');
-    const $views = qsa('.tabview');
     const EMAIL_KEY = 'tj-email';
 
-    // Theme
-    const THEME_KEY = 'tj-theme';
-    function applyTheme() {
-      const t = localStorage.getItem(THEME_KEY) || 'light';
-      document.documentElement.classList.toggle('dark', t === 'dark');
-      document.body.classList.toggle('bg-slate-900', t === 'dark');
-      document.body.classList.toggle('text-slate-100', t === 'dark');
-      qs('#btn-theme').textContent = t === 'dark' ? 'Light' : 'Dark';
+    const fmt = d => dayjs(d).format('YYYY-MM-DD HH:mm');
+    function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+    function calcR(entry, stop, exit){
+      if (!entry || !stop || !exit) return null;
+      const risk = Math.abs(entry - stop); if (!risk) return null;
+      const reward = Math.abs(exit - entry);
+      return +(reward / risk * (exit > entry ? (entry > stop ? 1 : -1) : (entry < stop ? 1 : -1))).toFixed(2);
     }
-    qs('#btn-theme').addEventListener('click', () => {
-      const cur = localStorage.getItem(THEME_KEY) || 'light';
-      localStorage.setItem(THEME_KEY, cur === 'light' ? 'dark' : 'light');
-      applyTheme();
-      renderAll();
-    });
-    applyTheme();
+    function withinWeek(d) {
+      const now = dayjs(); return dayjs(d).isAfter(now.startOf('week')) && dayjs(d).isBefore(now.endOf('week'));
+    }
 
-    // Tabs
-    $tabs.forEach(btn => btn.addEventListener('click', ()=> {
-      $tabs.forEach(b=>b.classList.remove('bg-indigo-600','text-white'));
-      btn.classList.add('bg-indigo-600','text-white');
-      const t = btn.dataset.tab;
-      $views.forEach(v => v.classList.toggle('hidden', v.id !== 'tab-'+t));
-      if (t === 'dashboard') renderDashboard();
-      if (t === 'calendar') renderCalendar();
-    }));
-
-    // Data layer
+    // ---- Supabase DAL ----
     async function getEntries() {
       if (!currentUser) return [];
       const { data, error } = await sb.from('entries').select('*').order('date', { ascending: true });
@@ -400,56 +419,61 @@
       const { error } = await sb.from('entries').upsert(payload).select();
       if (error) throw error;
     }
-    async function deleteEntry(id) {
+    async function deleteEntry(id){
       const { error } = await sb.from('entries').delete().eq('id', id);
       if (error) throw error;
     }
 
-    // Utils
-    function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-    function calcR(entry, stop, exit) {
-      if (!entry || !stop || !exit) return null;
-      const risk = Math.abs(entry - stop); if (risk === 0) return null;
-      const reward = Math.abs(exit - entry);
-      return +(reward / risk * (exit > entry ? (entry > stop ? 1 : -1) : (entry < stop ? 1 : -1))).toFixed(2);
-    }
-    function withinWeek(d) {
-      const now = dayjs(); const start = now.startOf('week'); const end = now.endOf('week');
-      const x = dayjs(d); return x.isAfter(start) && x.isBefore(end);
-    }
-
-    // KPIs + stats
-    function computeStats(rows) {
+    // ---- Stats / KPIs ----
+    function computeStats(rows){
       const n = rows.length;
-      const wins = rows.filter(r => r.outcome === 'Win');
-      const losses = rows.filter(r => r.outcome === 'Loss');
-      const be = rows.filter(r => r.outcome === 'BE');
-      const rSum = rows.reduce((s, r) => s + (+r.rMultiple || 0), 0);
-      const wr = n ? Math.round((wins.length / (wins.length + losses.length || 1)) * 100) : 0;
-      const avgR = n ? +(rSum / n).toFixed(2) : 0;
-      const winSum = wins.reduce((s, r) => s + (+r.rMultiple || 0), 0);
-      const lossSumAbs = Math.abs(losses.reduce((s, r) => s + (+r.rMultiple || 0), 0));
+      const wins = rows.filter(r=>r.outcome==='Win');
+      const losses = rows.filter(r=>r.outcome==='Loss');
+      const be = rows.filter(r=>r.outcome==='BE');
+      const rSum = rows.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const wr = n ? Math.round((wins.length / (wins.length + losses.length || 1))*100) : 0;
+      const avgR = n ? +(rSum/n).toFixed(2) : 0;
+      const winSum = wins.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const lossSum = losses.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const lossSumAbs = Math.abs(lossSum);
       const pf = lossSumAbs ? +(winSum / lossSumAbs).toFixed(2) : (wins.length ? Infinity : 0);
-      const best = n ? Math.max(...rows.map(r => +r.rMultiple || -Infinity)) : 0;
-      const worst = n ? Math.min(...rows.map(r => +r.rMultiple || Infinity)) : 0;
-      const expectancy = avgR; // average R per trade
-      // streak
-      let streak = 0, kind = '';
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if (rows[i].outcome === 'Win') { kind = 'W'; streak++; }
-        else if (rows[i].outcome === 'Loss') { kind = 'L'; streak++; }
+      const best = n ? Math.max(...rows.map(r=> +r.rMultiple || -Infinity)) : 0;
+      const worst = n ? Math.min(...rows.map(r=> +r.rMultiple || Infinity)) : 0;
+      const avgWin = wins.length ? +(winSum / wins.length).toFixed(2) : 0;
+      const avgLossAbs = losses.length ? +((Math.abs(lossSum)) / losses.length).toFixed(2) : 0;
+      const rr = avgLossAbs ? +(avgWin / avgLossAbs).toFixed(2) : (avgWin?Infinity:0);
+      const expectancy = avgR;
+
+      // streaks (chronological)
+      let curW=0, curL=0, maxW=0, maxL=0;
+      for (const r of rows){
+        if (r.outcome==='Win'){ curW++; curL=0; maxW=Math.max(maxW,curW); }
+        else if (r.outcome==='Loss'){ curL++; curW=0; maxL=Math.max(maxL,curL); }
+        else { curW=0; curL=0; }
+      }
+      // current streak type
+      let streak=0, streakKind='—';
+      for (let i=rows.length-1; i>=0; i--){
+        if (rows[i].outcome==='Win'){ streakKind='W'; streak++; }
+        else if (rows[i].outcome==='Loss'){ streakKind='L'; streak++; }
         else break;
       }
-      return { n, wins: wins.length, losses: losses.length, be: be.length, rSum:+rSum.toFixed(2), wr, avgR,
-               pf, best, worst, expectancy, streak, streakKind: kind || '—' };
+      return { n, wins:wins.length, losses:losses.length, be:be.length, rSum:+rSum.toFixed(2), wr, avgR, pf, best, worst, avgWin, avgLossAbs, rr, expectancy, maxW, maxL, streak, streakKind };
     }
 
-    function renderKpiStrip(rows) {
+    function dailyTotals(rows){
+      return rows.reduce((m,r)=>{ const d=dayjs(r.date).format('YYYY-MM-DD'); m[d]=(m[d]||0)+(+r.rMultiple||0); return m; }, {});
+    }
+
+    function renderKpiStrip(rows){
       const { n, wr, rSum, avgR, pf } = computeStats(rows);
-      const week = rows.filter(r => withinWeek(r.date));
-      const wSum = week.reduce((s,r)=>s+(+r.rMultiple||0),0);
-      const wWin = week.filter(r=>r.outcome==='Win').length;
-      const wLoss = week.filter(r=>r.outcome==='Loss').length;
+      const week = rows.filter(r=> withinWeek(r.date));
+      const wSum = week.reduce((s,r)=> s+(+r.rMultiple||0), 0);
+      const wWin = week.filter(r=> r.outcome==='Win').length;
+      const wLoss = week.filter(r=> r.outcome==='Loss').length;
+      const todayKey = dayjs().format('YYYY-MM-DD');
+      const todayR = dailyTotals(rows)[todayKey] ?? 0;
+
       const k = (label,val,sub='')=>`
         <div class="bg-white border border-slate-200 rounded-2xl p-3">
           <div class="text-[10px] uppercase text-slate-500">${label}</div>
@@ -462,29 +486,36 @@
         k('Avg R/Trade', avgR),
         k('Profit Factor', pf),
         k('This Week', wSum.toFixed(2)+' R', `${wWin}W / ${wLoss}L`),
-        k('Today', dailyTotals(rows)[dayjs().format('YYYY-MM-DD')]?.toFixed(2) ?? '0.00 R')
+        k('Today', (todayR>0?'+':'')+todayR.toFixed(2)+' R'),
+        k('Best R', rows.length?Math.max(...rows.map(r=>+r.rMultiple||-Infinity)):0),
+        k('Worst R', rows.length?Math.min(...rows.map(r=>+r.rMultiple||Infinity)):0),
       ].join('');
-      // ribbon details
+
+      // Journal ribbon extras
       qs('#r-week').textContent = wSum.toFixed(2)+' R';
       qs('#r-week-detail').textContent = `${wWin}W / ${wLoss}L`;
       const { streak, streakKind } = computeStats(rows);
       qs('#streak').textContent = `${streak} ${streakKind}`;
       qs('#streak-detail').textContent = `current ${streakKind==='W'?'winning':'losing'} streak`;
-      // avg session (very rough for preview)
       const sessions = ['NY','London','Asia'];
       const sessCounts = Object.fromEntries(sessions.map(s=>[s, rows.filter(r=>r.session===s).length]));
       const topSess = sessions.sort((a,b)=>sessCounts[b]-sessCounts[a])[0] || '—';
       qs('#avg-session').textContent = topSess;
     }
 
-    // Filters
-    function applyFilters(rows) {
+    // ---- Filters / Rendering ----
+    function renderSymbolFilter(all){
+      const sel = qs('#filter-symbol');
+      const uniq = Array.from(new Set(all.map(e=>e.symbol))).filter(Boolean).sort();
+      sel.innerHTML = `<option value="">All Symbols</option>` + uniq.map(s=>`<option>${s}</option>`).join('');
+    }
+    function applyFilters(rows){
       const q = qs('#filter-search').value.trim().toLowerCase();
       const sym = qs('#filter-symbol').value;
       const dir = qs('#filter-direction').value;
       const out = qs('#filter-outcome').value;
       const typ = qs('#filter-type').value;
-      return rows.filter(r => {
+      return rows.filter(r=>{
         if (sym && r.symbol !== sym) return false;
         if (dir && r.direction !== dir) return false;
         if (out && r.outcome !== out) return false;
@@ -492,21 +523,14 @@
           const has = (r.tags||[]).map(t=>t.toLowerCase());
           if (!has.includes(typ.toLowerCase())) return false;
         }
-        if (q) {
+        if (q){
           const hay = [r.symbol, r.setup, r.notes, (r.tags||[]).join(' ')].join(' ').toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
       });
     }
-
-    function renderSymbolFilter(all) {
-      const sel = qs('#filter-symbol');
-      const uniq = Array.from(new Set(all.map(e => e.symbol))).filter(Boolean).sort();
-      sel.innerHTML = `<option value="">All Symbols</option>` + uniq.map(s=>`<option>${s}</option>`).join('');
-    }
-
-    function makeRow(r) {
+    function makeRow(r){
       const tr = document.createElement('tr');
       tr.className = 'hover:bg-slate-50';
       const typeTag = (r.tags||[]).find(t=>/live|backtest/i.test(t)) || '';
@@ -530,8 +554,7 @@
       tr.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
       return tr;
     }
-
-    function makeCard(r) {
+    function makeCard(r){
       const typeTag = (r.tags||[]).find(t=>/live|backtest/i.test(t)) || '';
       const el = document.createElement('div');
       el.className = 'p-3';
@@ -557,7 +580,7 @@
       return el;
     }
 
-    function openLightbox(imgs) {
+    function openLightbox(imgs){
       const lb = document.createElement('dialog');
       lb.className = 'rounded-2xl backdrop:bg-black/60 w-full max-w-4xl';
       lb.innerHTML = `
@@ -573,83 +596,78 @@
       lb.addEventListener('close', ()=> lb.remove());
     }
 
-    // Load & render
+    // ---- Load & render ----
     let ALL = [];
-    async function load() {
+    async function load(){
       if (!currentUser) {
-        renderSymbolFilter([]); qs('#entries-body').innerHTML=''; qs('#cards').innerHTML=''; renderKpiStrip([]);
+        renderSymbolFilter([]); qs('#entries-body').innerHTML=''; qs('#cards').innerHTML=''; renderKpiStrip([]); renderDashboard(true); renderCalendar(true);
         return;
       }
       ALL = await getEntries();
       renderAll();
     }
-    function renderAll() {
+    function renderAll(){
       renderKpiStrip(ALL);
       renderJournal();
       if (!qs('#tab-dashboard').classList.contains('hidden')) renderDashboard();
       if (!qs('#tab-calendar').classList.contains('hidden')) renderCalendar();
     }
-    function renderJournal() {
+    function renderJournal(){
       const filtered = applyFilters(ALL);
-      // Desktop table
-      const tbody = qs('#entries-body'); tbody.innerHTML = ''; filtered.forEach(r => tbody.appendChild(makeRow(r)));
-      // Mobile cards
-      const cards = qs('#cards'); cards.innerHTML = ''; filtered.slice().reverse().forEach(r => cards.appendChild(makeCard(r)));
+      // desktop table (latest first)
+      const tbody = qs('#entries-body'); tbody.innerHTML=''; filtered.slice().reverse().forEach(r=> tbody.appendChild(makeRow(r)));
+      // mobile cards (latest first)
+      const cards = qs('#cards'); cards.innerHTML=''; filtered.slice().reverse().forEach(r=> cards.appendChild(makeCard(r)));
       renderSymbolFilter(ALL);
     }
 
-    // Dashboard charts
+    // ---- Dashboard charts ----
     let cumChart, dailyChart;
-    function dailyTotals(rows) {
-      return rows.reduce((m, r) => {
-        const d = dayjs(r.date).format('YYYY-MM-DD');
-        m[d] = (m[d] || 0) + (+r.rMultiple || 0); return m;
-      }, {});
-    }
-    function renderDashboard() {
+    function renderDashboard(clearOnly=false){
+      if (clearOnly){ qs('#kpis').innerHTML=''; return; }
       const stats = computeStats(ALL);
-      const kpi = (label, val, sub='')=>`
-        <div class="bg-white border border-slate-200 rounded-2xl p-4">
-          <div class="text-xs uppercase text-slate-500">${label}</div>
-          <div class="text-2xl font-semibold">${val}</div>
-          ${sub?`<div class="text-xs text-slate-500 mt-1">${sub}</div>`:''}
-        </div>`;
+      const kpi=(l,v,s='')=>`<div class="bg-white border border-slate-200 rounded-2xl p-4"><div class="text-xs uppercase text-slate-500">${l}</div><div class="text-2xl font-semibold">${v}</div>${s?`<div class="text-xs text-slate-500 mt-1">${s}</div>`:''}</div>`;
+      // Max drawdown from cumulative R series
+      const byDay = dailyTotals(ALL); const days = Object.keys(byDay).sort();
+      const daily = days.map(d=> +byDay[d].toFixed(2));
+      const cum = []; daily.reduce((s,v,i)=> (cum[i]=+(s+v).toFixed(2), s+v), 0);
+      let peak = -Infinity, mdd = 0;
+      cum.forEach(c=>{ peak = Math.max(peak, c); mdd = Math.min(mdd, c - peak); });
+      const maxDD = +mdd.toFixed(2); // negative or 0
+
+      const avgWin = stats.avgWin, avgLoss = stats.avgLossAbs, rr = stats.rr;
       qs('#kpis').innerHTML = [
         kpi('Trades', stats.n, `${stats.wins}W / ${stats.losses}L / ${stats.be}BE`),
         kpi('Win Rate', stats.wr + '%'),
         kpi('Profit Factor', stats.pf),
         kpi('Expectancy (R/trade)', stats.expectancy.toFixed(2)),
-        kpi('Best R', stats.best),
-        kpi('Worst R', stats.worst)
+        kpi('Avg Win (R)', avgWin),
+        kpi('Avg Loss |R|', avgLoss),
+        kpi('R:R', rr===Infinity ? '∞' : rr),
+        kpi('Max Drawdown (R)', maxDD)
       ].join('');
 
-      // Build series
-      const byDay = dailyTotals(ALL);
-      const days = Object.keys(byDay).sort();
-      const daily = days.map(d => +byDay[d].toFixed(2));
-      const cum = []; daily.reduce((s,v,i)=> (cum[i]=+(s+v).toFixed(2), s+v), 0);
-
-      // Cumulative chart
       const ctx1 = qs('#cumrChart').getContext('2d');
       if (cumChart) cumChart.destroy();
-      cumChart = new Chart(ctx1, { type:'line', data:{ labels: days, datasets:[{ label:'Cumulative R', data: cum }]}, options:{ responsive:true, maintainAspectRatio:false } });
+      cumChart = new Chart(ctx1, { type:'line', data:{ labels: days, datasets:[{ label:'Cumulative R', data: cum, tension: .25 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } } });
 
-      // Daily chart
       const ctx2 = qs('#dailyChart').getContext('2d');
       if (dailyChart) dailyChart.destroy();
-      dailyChart = new Chart(ctx2, { type:'bar', data:{ labels: days, datasets:[{ label:'Daily R', data: daily }]}, options:{ responsive:true, maintainAspectRatio:false } });
+      dailyChart = new Chart(ctx2, { type:'bar', data:{ labels: days, datasets:[{ label:'Daily R', data: daily }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } } });
     }
 
-    // Calendar
+    // ---- Calendar ----
     let calMonth = dayjs().startOf('month');
     qs('#cal-prev').addEventListener('click', ()=>{ calMonth = calMonth.subtract(1,'month'); renderCalendar(); });
     qs('#cal-next').addEventListener('click', ()=>{ calMonth = calMonth.add(1,'month'); renderCalendar(); });
 
-    function renderCalendar() {
+    function renderCalendar(clearOnly=false){
+      if (clearOnly){ qs('#cal-grid').innerHTML=''; qs('#cal-title').textContent = dayjs().format('MMMM YYYY'); return; }
       qs('#cal-title').textContent = calMonth.format('MMMM YYYY');
       const grid = qs('#cal-grid'); grid.innerHTML = '';
       const start = calMonth.startOf('week'); const end = calMonth.endOf('month').endOf('week');
       const totals = dailyTotals(ALL);
+
       for (let d = start; d.isBefore(end) || d.isSame(end,'day'); d = d.add(1,'day')) {
         const inMonth = d.isSame(calMonth,'month');
         const key = d.format('YYYY-MM-DD');
@@ -662,20 +680,16 @@
             <div class="text-xs">${d.format('D')}</div>
             <div class="text-xs ${tone}">${val ? (val>0?'+':'')+val+' R' : ''}</div>
           </div>`;
-        if (inMonth) {
-          box.addEventListener('click', ()=> openDayModal(key, val));
-        } else {
-          box.disabled = true;
-        }
+        if (inMonth) { box.addEventListener('click', ()=> openDayModal(key, val)); } else { box.disabled = true; }
         grid.appendChild(box);
       }
     }
 
-    function openDayModal(isoDate, total) {
+    function openDayModal(isoDate, total){
       const dm = qs('#day-modal');
-      qs('#day-title').textContent = `${dayjs(isoDate).format('MMMM D, YYYY')} — ${total>0?'+':''}${total.toFixed(2)} R`;
-      const list = qs('#day-list'); list.innerHTML = '';
-      const rows = ALL.filter(r => dayjs(r.date).format('YYYY-MM-DD') === isoDate);
+      qs('#day-title').textContent = `${dayjs(isoDate).format('MMMM D, YYYY')} — ${(total>0?'+':'')+total.toFixed(2)} R`;
+      const list = qs('#day-list'); list.innerHTML='';
+      const rows = ALL.filter(r=> dayjs(r.date).format('YYYY-MM-DD') === isoDate);
       if (!rows.length) list.innerHTML = `<div class="p-3 text-sm text-slate-500">No trades</div>`;
       rows.forEach(r=>{
         const el = document.createElement('div');
@@ -698,36 +712,40 @@
     }
     qs('#day-close').addEventListener('click', ()=> qs('#day-modal').close());
 
-    // Entry modal wiring
+    // ---- Modal / Entry form ----
     const modal = qs('#modal');
     const form = qs('#entry-form');
     const fileInput = qs('#file-input');
     const thumbs = qs('#thumbs');
     const clipboardImages = [];
 
-    function resetForm(data={}) {
-      form.reset(); thumbs.innerHTML = ''; clipboardImages.length = 0;
+    function resetForm(data={}){
+      form.reset(); thumbs.innerHTML=''; clipboardImages.length=0;
       qs('#date').value = data.date ? dayjs(data.date).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm');
+      // defaults from Settings
       qs('#type').value = data.tags?.includes('Backtest') ? 'Backtest' : (data.tags?.includes('Live') ? 'Live' : (localStorage.getItem('def-type')||'Live'));
       qs('#session').value = data.session || (localStorage.getItem('def-session')||'NY');
-      qs('#direction').value = data.direction||'Long';
-      // symbol select/custom
+      qs('#direction').value = data.direction || 'Long';
+      // symbol
       qs('#symbolSel').value = (['NQ1!','ES1!','GC1!','CL1!'].includes(data.symbol)?data.symbol:'__custom');
       qs('#symbol').classList.toggle('hidden', qs('#symbolSel').value !== '__custom');
       qs('#symbol').value = data.symbol || (qs('#symbolSel').value==='__custom'?'':qs('#symbolSel').value);
+      // setup & prices
       qs('#setup').value = data.setup||'FVG Continuation';
       qs('#entry').value = data.entry ?? '';
       qs('#stop').value = data.stop ?? '';
       qs('#exit').value = data.exit ?? '';
       qs('#rMultiple').value = data.rMultiple ?? '';
-      qs('#outcome').value = data.outcome||'Win';
+      qs('#outcome').value = data.outcome || 'Win';
       qs('#tags').value = (data.tags||[]).join(', ');
-      qs('#notes').value = data.notes||'';
+      qs('#notes').value = data.notes || '';
       if (data.images?.length) data.images.forEach(addThumbUrl);
       form.dataset.id = data.id || '';
     }
-    function openModal(data) { resetForm(data||{}); modal.showModal(); }
+    function openModal(data){ resetForm(data||{}); modal.showModal(); }
     qs('#btn-new').addEventListener('click', ()=> openModal());
+    qs('#btn-new-desktop').addEventListener('click', ()=> openModal());
+    qs('#btn-new-settings').addEventListener('click', ()=> openModal());
 
     qs('#symbolSel').addEventListener('change', ()=>{
       const v = qs('#symbolSel').value;
@@ -735,7 +753,7 @@
       if (v !== '__custom') qs('#symbol').value = v; else qs('#symbol').value = '';
     });
 
-    // Paste handler
+    // Paste images
     document.addEventListener('paste', (e)=>{
       if (!modal.open) return;
       const items = Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
@@ -748,7 +766,7 @@
     });
 
     // Dropzone
-    function addThumbUrl(url) {
+    function addThumbUrl(url){
       const img = document.createElement('img');
       img.src = url; img.className = 'thumb w-full h-28 object-cover rounded-xl border border-slate-200';
       thumbs.appendChild(img);
@@ -760,18 +778,18 @@
     dz.addEventListener('drop', async (e)=>{
       e.preventDefault(); dz.classList.remove('ring-2','ring-indigo-500');
       const files = Array.from(e.dataTransfer.files||[]).filter(f=>f.type.startsWith('image/'));
-      for (const f of files) { const url = await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url); }
+      for (const f of files){ const url = await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url); }
     });
-    function fileToDataUrl(file) { return new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload = ()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+    function fileToDataUrl(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
 
-    // Auto R calc
+    // Auto R
     ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
       const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
       const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
     }));
 
-    // Storage uploads
-    async function uploadDataUrlToStorage(dataUrl) {
+    // Uploads
+    async function uploadDataUrlToStorage(dataUrl){
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       const ext = blob.type.split('/')[1] || 'png';
@@ -781,11 +799,11 @@
       const { data } = sb.storage.from('shots').getPublicUrl(path);
       return data.publicUrl;
     }
-    async function gatherImages() {
+    async function gatherImages(){
       if (!currentUser) return [];
       const urls = [];
-      const files = Array.from(qs('#file-input').files || []);
-      for (const f of files) {
+      const files = Array.from(fileInput.files || []);
+      for (const f of files){
         const ext = (f.type.split('/')[1] || 'png');
         const path = `${currentUser.id}/${uid()}.${ext}`;
         const { error } = await sb.storage.from('shots').upload(path, f, { contentType: f.type, upsert: false });
@@ -793,7 +811,7 @@
         const { data } = sb.storage.from('shots').getPublicUrl(path);
         urls.push(data.publicUrl);
       }
-      for (const d of clipboardImages) { urls.push(await uploadDataUrlToStorage(d)); }
+      for (const d of clipboardImages){ urls.push(await uploadDataUrlToStorage(d)); }
       return urls;
     }
 
@@ -807,6 +825,7 @@
       const type = qs('#type').value;
       const tagsSet = new Set(qs('#tags').value.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s[0].toUpperCase()+s.slice(1)));
       tagsSet.add(type); // ensure Live/Backtest tag
+
       const rec = {
         id,
         date: new Date(qs('#date').value).toISOString(),
@@ -829,59 +848,140 @@
         await upsertEntry(rec);
         modal.close();
         load();
-      } catch(err) { alert('Save failed: '+err.message); }
+      } catch(err){ alert('Save failed: '+err.message); }
     });
     qs('#btn-cancel').addEventListener('click', ()=> modal.close());
 
-    // Chips quick filters
+    // ---- Filters ----
+    qsa('#filter-search, #filter-symbol, #filter-direction, #filter-outcome, #filter-type').forEach(el=> el.addEventListener('input', renderJournal));
     qsa('.chip').forEach(ch => ch.addEventListener('click', ()=>{
       const expr = ch.dataset.q;
-      if (expr.startsWith('setup:')) {
-        qs('#filter-search').value = expr.replace('setup:','');
-      } else if (expr.startsWith('tags:')) {
-        qs('#filter-type').value = expr.replace('tags:','');
-      }
+      if (expr.startsWith('setup:')) qs('#filter-search').value = expr.replace('setup:','');
+      else if (expr.startsWith('tags:')) qs('#filter-type').value = expr.replace('tags:','');
       renderJournal();
     }));
 
-    // Filter inputs
-    ['filter-search','filter-symbol','filter-direction','filter-outcome','filter-type'].forEach(id=>
-      qs('#'+id).addEventListener('input', renderJournal)
-    );
+    // ---- Tabs ----
+    const $tabs = qsa('.tab');
+    const $views = qsa('.tabview');
+    $tabs.forEach(btn => btn.addEventListener('click', ()=> {
+      $tabs.forEach(b=>b.classList.remove('bg-indigo-600','text-white'));
+      btn.classList.add('bg-indigo-600','text-white');
+      const t = btn.dataset.tab;
+      $views.forEach(v => v.classList.toggle('hidden', v.id !== 'tab-'+t));
+      if (t==='dashboard') renderDashboard();
+      if (t==='calendar') renderCalendar();
+    }));
+    // Bottom nav mirrors tabs on mobile
+    qsa('.bn').forEach(btn => btn.addEventListener('click', ()=> {
+      const t = btn.dataset.tab;
+      const topBtn = qs('.tab[data-tab="'+t+'"]'); topBtn?.click();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }));
 
-    // Auth
-    async function ensureSession() {
+    // ---- Settings ----
+    qs('#def-type').value = localStorage.getItem('def-type') || 'Live';
+    qs('#def-session').value = localStorage.getItem('def-session') || 'NY';
+    qs('#def-type').addEventListener('change', e=> localStorage.setItem('def-type', e.target.value));
+    qs('#def-session').addEventListener('change', e=> localStorage.setItem('def-session', e.target.value));
+
+    // ---- Export / Import / Reset (header + settings) ----
+    function connectDataButtons(prefix=''){
+      const id = (x)=> prefix? `#${x}-${prefix}` : `#${x}`;
+      qs(id('btn-export'))?.addEventListener('click', async ()=>{
+        if (!currentUser) return alert('Sign in first.');
+        const rows = await getEntries();
+        const data = { exportedAt: new Date().toISOString(), entries: rows };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `trading-journal-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url);
+      });
+      qs(id('file-import'))?.addEventListener('change', async (e)=>{
+        if (!currentUser) return alert('Sign in first.');
+        const file = e.target.files[0]; if (!file) return;
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          if (!Array.isArray(data.entries)) throw new Error('Invalid file');
+          for (const row of data.entries) {
+            await upsertEntry({
+              id: row.id,
+              date: row.date,
+              symbol: row.symbol,
+              direction: row.direction,
+              setup: row.setup,
+              entry: row.entry,
+              stop: row.stop,
+              exit: row.exit,
+              rMultiple: row.rMultiple,
+              outcome: row.outcome,
+              session: row.session,
+              tags: row.tags,
+              notes: row.notes,
+              images: row.images
+            });
+          }
+          load(); alert('Import complete');
+        } catch(err){ alert('Import failed: '+err.message); }
+        e.target.value = '';
+      });
+      qs(id('btn-clear'))?.addEventListener('click', async ()=>{
+        if (!currentUser) return alert('Sign in first.');
+        if (!confirm('This will erase ALL your entries in the cloud for this account. Continue?')) return;
+        const { error } = await sb.from('entries').delete().neq('id', null);
+        if (error) return alert(error.message);
+        load();
+      });
+    }
+    connectDataButtons('settings'); // settings page buttons
+    connectDataButtons('');         // header buttons
+
+    // ---- Auth (OTP code flow; no Safari bounce) ----
+    async function ensureSession(){
       const { data: { user } } = await sb.auth.getUser();
       currentUser = user;
-      qs('#btn-login')?.classList.toggle('hidden', !!user);
-      qs('#btn-logout')?.classList.toggle('hidden', !user);
+      const signed = !!user;
+      // header
+      qs('#btn-login')?.classList.toggle('hidden', signed);
+      qs('#btn-logout')?.classList.toggle('hidden', !signed);
+      // mobile
+      qs('#btn-login-m')?.classList.toggle('hidden', signed);
+      qs('#btn-logout-m')?.classList.toggle('hidden', !signed);
     }
-    qs('#btn-logout').addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser = null; load(); });
-
-    // OTP code flow (no Safari bounce)
-    qs('#btn-login').addEventListener('click', async ()=>{
+    async function startOtp(){
       const defaultEmail = localStorage.getItem(EMAIL_KEY) || '';
       const email = prompt('Enter your email (we will send a 6-digit code):', defaultEmail);
       if (!email) return;
       localStorage.setItem(EMAIL_KEY, email);
       let redirectTo = window.location.origin + window.location.pathname; if (!redirectTo.endsWith('/')) redirectTo += '/';
-      const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: redirectTo, shouldCreateUser: true } });
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true } });
       if (error) return alert(error.message);
       const code = prompt('Enter the 6-digit code from your email (ignore the link):'); if (!code) return;
       const { error: verifyErr } = await sb.auth.verifyOtp({ email, token: code.trim(), type: 'email' });
       if (verifyErr) return alert('Code verification failed: '+verifyErr.message);
-      alert('Signed in!'); await ensureSession(); load();
-    });
+      alert('Signed in!');
+      await ensureSession(); load();
+    }
+    qs('#btn-login')?.addEventListener('click', startOtp);
+    qs('#btn-login-m')?.addEventListener('click', startOtp);
+    qs('#btn-logout')?.addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser=null; load(); });
+    qs('#btn-logout-m')?.addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser=null; load(); });
+    sb.auth.onAuthStateChange((_e, session)=>{ currentUser = session?.user ?? null; ensureSession().then(load); });
 
-    // Settings
-    qs('#def-type').value = localStorage.getItem('def-type') || 'Live';
-    qs('#def-session').value = localStorage.getItem('def-session') || 'NY';
-    qs('#def-type').addEventListener('change', (e)=> localStorage.setItem('def-type', e.target.value));
-    qs('#def-session').addEventListener('change', (e)=> localStorage.setItem('def-session', e.target.value));
-
-    // Init
+    // ---- Init ----
     await ensureSession();
     load();
+  </script>
+
+  <!-- PWA: register your service worker (path & scope must match your repo subpath) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/trading-journal/sw.js', { scope: '/trading-journal/' })
+          .then(r => console.log('SW registered:', r.scope))
+          .catch(err => console.error('SW registration failed:', err));
+      });
+    }
   </script>
 </body>
 </html>
