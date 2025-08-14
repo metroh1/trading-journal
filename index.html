@@ -1,19 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trading Journal (Cloud Sync)</title>
+  <title>Trading Journal</title>
 
-  <!-- Tailwind (CDN warning is fine to ignore for now) -->
+  <!-- Tailwind config (enable class-based dark mode) -->
+  <script>
+    window.tailwind = window.tailwind || {};
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <!-- Tailwind (CDN — OK for now) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- dayjs + plugins (UMD globals: dayjs_plugin_utc / dayjs_plugin_timezone) -->
+  <!-- dayjs + plugins -->
   <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/utc.js"></script>
   <script src="https://unpkg.com/dayjs@1.11.11/plugin/timezone.js"></script>
 
-  <!-- PWA hooks (scope: /trading-journal/) -->
+  <!-- PWA hooks (scoped to your Pages path) -->
   <link rel="manifest" href="/trading-journal/manifest.webmanifest" />
   <meta name="theme-color" content="#4f46e5" />
   <link rel="apple-touch-icon" href="/trading-journal/icons/icon-180.png" />
@@ -22,286 +27,382 @@
   <style>
     html { scroll-behavior: smooth; }
     .dropzone-dashed { border: 2px dashed rgb(209 213 219); }
-    .thumb { max-height: 128px; }
+    .thumb { max-height: 120px; }
+    @supports(padding: max(0px)) { .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), .75rem); } }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
-  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+<body class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+  <!-- Header -->
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
       <div class="h-8 w-8 rounded-2xl bg-indigo-600 text-white grid place-items-center font-bold">TJ</div>
-      <h1 class="text-xl font-semibold">Trading Journal</h1>
-      <div class="ml-auto flex items-center gap-2">
-        <button id="btn-new" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">New Entry</button>
+      <h1 class="text-lg sm:text-xl font-semibold">Trading Journal</h1>
+      <div class="ml-auto hidden md:flex items-center gap-2">
+        <button id="btn-theme" class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">Dark</button>
+        <div class="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-2"></div>
+        <button id="btn-new-desktop" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">New Entry</button>
         <button id="btn-export" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900">Export</button>
-        <label class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 cursor-pointer">
+        <label class="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 cursor-pointer">
           <input id="file-import" type="file" accept="application/json" class="hidden" />Import
         </label>
         <button id="btn-clear" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700" title="Clear ALL data in your account">Reset</button>
-        <div class="w-px h-6 bg-slate-200 mx-2"></div>
+        <div class="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-2"></div>
         <button id="btn-login" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white">Sign in</button>
-        <button id="btn-logout" class="px-3 py-1.5 rounded-xl bg-slate-200 hidden">Sign out</button>
+        <button id="btn-logout" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hidden">Sign out</button>
+      </div>
+      <div class="ml-auto md:hidden flex items-center gap-2">
+        <button id="btn-theme-m" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">🌙</button>
+        <button id="btn-login-m" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white">Sign in</button>
+        <button id="btn-logout-m" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hidden">Out</button>
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-6">
-    <!-- Filters -->
-    <section class="grid md:grid-cols-4 gap-3 mb-6">
-      <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300"/>
-      <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300">
-        <option value="">All Symbols</option>
-      </select>
-      <select id="filter-direction" class="px-3 py-2 rounded-xl border border-slate-300">
-        <option value="">All Directions</option>
-        <option>Long</option>
-        <option>Short</option>
-      </select>
-      <select id="filter-outcome" class="px-3 py-2 rounded-xl border border-slate-300">
-        <option value="">All Outcomes</option>
-        <option>Win</option>
-        <option>Loss</option>
-        <option>BE</option>
-      </select>
+  <!-- KPI strip -->
+  <section id="kpi-strip" class="max-w-7xl mx-auto px-4 py-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+    <!-- filled by JS -->
+  </section>
+
+  <!-- Tabs -->
+  <nav class="max-w-7xl mx-auto px-4 pb-2">
+    <div class="inline-flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <button data-tab="journal" class="tab px-4 py-2 text-sm bg-indigo-600 text-white">Journal</button>
+      <button data-tab="dashboard" class="tab px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Dashboard</button>
+      <button data-tab="calendar" class="tab px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Calendar</button>
+      <button data-tab="settings" class="tab px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Settings</button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 pb-28">
+    <!-- JOURNAL -->
+    <section id="tab-journal" class="tabview">
+      <!-- Quick filters -->
+      <div class="grid md:grid-cols-5 gap-3 mb-4">
+        <input id="filter-search" type="search" placeholder="Search notes, tags, symbol…" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+        <select id="filter-symbol" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">All Symbols</option>
+        </select>
+        <select id="filter-direction" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">All Directions</option>
+          <option>Long</option>
+          <option>Short</option>
+        </select>
+        <select id="filter-outcome" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">All Outcomes</option>
+          <option>Win</option>
+          <option>Loss</option>
+          <option>BE</option>
+        </select>
+        <select id="filter-type" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="">All Types</option>
+          <option>Live</option>
+          <option>Backtest</option>
+        </select>
+      </div>
+
+      <!-- Journal ribbon -->
+      <div class="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-xs uppercase text-slate-500 dark:text-slate-400">This Week</div>
+          <div id="r-week" class="text-2xl font-semibold">0.00 R</div>
+          <div id="r-week-detail" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-xs uppercase text-slate-500 dark:text-slate-400">Streak</div>
+          <div id="streak" class="text-2xl font-semibold">0 W</div>
+          <div id="streak-detail" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-xs uppercase text-slate-500 dark:text-slate-400">Avg Session</div>
+          <div id="avg-session" class="text-2xl font-semibold">–</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">NY / London / Asia</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-xs uppercase text-slate-500 dark:text-slate-400">Quick Filters</div>
+          <div class="flex flex-wrap gap-2 mt-2 text-xs">
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" data-q="tags:Live">Live</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" data-q="tags:Backtest">Backtest</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" data-q="setup:FVG Continuation">FVG Cont.</button>
+            <button class="chip px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" data-q="setup:IFVG">IFVG</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table / Cards -->
+      <section class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div class="overflow-x-auto hidden md:block">
+          <table class="min-w-full text-sm" id="entries-table">
+            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase text-xs">
+              <tr>
+                <th class="text-left px-4 py-3">Date</th>
+                <th class="text-left px-4 py-3">Symbol</th>
+                <th class="text-left px-4 py-3">Type</th>
+                <th class="text-left px-4 py-3">Dir</th>
+                <th class="text-left px-4 py-3">Setup</th>
+                <th class="text-right px-4 py-3">R</th>
+                <th class="text-left px-4 py-3">Outcome</th>
+                <th class="text-left px-4 py-3">Tags</th>
+                <th class="text-left px-4 py-3">Notes</th>
+                <th class="text-left px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody id="entries-body" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+        <!-- Mobile cards -->
+        <div id="cards" class="md:hidden divide-y divide-slate-100 dark:divide-slate-800"></div>
+      </section>
+
+      <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">Images are stored in the <code>shots</code> bucket. Sign in to view/edit.</div>
     </section>
 
-    <!-- KPIs -->
-    <section id="kpis" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></section>
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="tabview hidden">
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4" id="kpis"></div>
 
-    <!-- Table -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-sm" id="entries-table">
-          <thead class="bg-slate-100 text-slate-600 uppercase text-xs">
-            <tr>
-              <th class="text-left px-4 py-3">Date</th>
-              <th class="text-left px-4 py-3">Symbol</th>
-              <th class="text-left px-4 py-3">Dir</th>
-              <th class="text-left px-4 py-3">Setup</th>
-              <th class="text-right px-4 py-3">R</th>
-              <th class="text-left px-4 py-3">Outcome</th>
-              <th class="text-left px-4 py-3">Tags</th>
-              <th class="text-left px-4 py-3">Notes</th>
-              <th class="text-left px-4 py-3">Shots</th>
-              <th class="text-left px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody id="entries-body" class="divide-y divide-slate-100"></tbody>
-        </table>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <!-- Charts are fixed-height cards (compact) -->
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-sm font-medium mb-2">Cumulative R</div>
+          <div class="h-56 md:h-64">
+            <canvas id="cumrChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div class="text-sm font-medium mb-2">Daily R</div>
+          <div class="h-56 md:h-64">
+            <canvas id="dailyChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
       </div>
     </section>
 
-    <p class="text-xs text-slate-500 mt-3">Cloud sync via Supabase. Images are stored in the <code>shots</code> bucket. Sign in to view/edit your entries.</p>
+    <!-- CALENDAR -->
+    <section id="tab-calendar" class="tabview hidden">
+      <div class="flex items-center gap-3 mb-3">
+        <button id="cal-prev" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">◀</button>
+        <div id="cal-title" class="text-lg font-semibold"></div>
+        <button id="cal-next" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">▶</button>
+      </div>
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+        <div class="grid grid-cols-7 gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+          <div class="text-center">Mon</div><div class="text-center">Tue</div><div class="text-center">Wed</div>
+          <div class="text-center">Thu</div><div class="text-center">Fri</div><div class="text-center">Sat</div><div class="text-center">Sun</div>
+        </div>
+        <div id="cal-grid" class="grid grid-cols-7 gap-2"></div>
+      </div>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-3">Tap a day to see trades and total R.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tabview hidden">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 max-w-xl">
+        <div class="text-sm font-medium mb-2">Defaults</div>
+        <div class="grid gap-3">
+          <label class="text-sm">Default Type
+            <select id="def-type" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Live</option>
+              <option>Backtest</option>
+            </select>
+          </label>
+          <label class="text-sm">Default Session
+            <select id="def-session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>NY</option>
+              <option>London</option>
+              <option>Asia</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="mt-6 text-sm font-medium mb-2">Data</div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-new-settings" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white">New Entry</button>
+          <button id="btn-export-settings" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white">Export</button>
+          <label class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 cursor-pointer">
+            <input id="file-import-settings" type="file" accept="application/json" class="hidden" />Import
+          </label>
+          <button id="btn-clear-settings" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white">Reset</button>
+        </div>
+      </div>
+    </section>
   </main>
 
-  <!-- Modal -->
+  <!-- Bottom nav (mobile) -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto grid grid-cols-4 text-center text-xs">
+      <button class="bn px-3 py-2" data-tab="journal">Journal</button>
+      <button class="bn px-3 py-2" data-tab="dashboard">Dashboard</button>
+      <button class="bn px-3 py-2" data-tab="calendar">Calendar</button>
+      <button class="bn px-3 py-2" data-tab="settings">Settings</button>
+    </div>
+  </nav>
+
+  <!-- Floating New button (mobile) -->
+  <button id="btn-new" class="md:hidden fixed bottom-16 right-5 safe-bottom rounded-full h-14 w-14 bg-indigo-600 text-white shadow-lg text-3xl leading-[3.3rem] text-center">＋</button>
+
+  <!-- Entry Modal -->
   <dialog id="modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
-    <form id="entry-form" method="dialog" class="p-4 sm:p-6">
+    <form id="entry-form" method="dialog" class="p-4 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl">
       <div class="flex items-center gap-3 mb-4">
         <h2 class="text-lg font-semibold">New Journal Entry</h2>
         <button type="submit" class="ml-auto px-3 py-1.5 rounded-xl bg-indigo-600 text-white">Save</button>
-        <button type="button" id="btn-cancel" class="px-3 py-1.5 rounded-xl bg-slate-200">Cancel</button>
+        <button type="button" id="btn-cancel" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">Cancel</button>
       </div>
 
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="grid gap-3">
           <label class="text-sm">Date/Time
-            <input id="date" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required />
+            <input id="date" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" required />
           </label>
-          <label class="text-sm">Symbol
-            <input id="symbol" placeholder="NQ1!" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required />
+
+          <label class="text-sm">Type
+            <select id="type" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>Live</option>
+              <option>Backtest</option>
+            </select>
           </label>
+
+          <label class="text-sm">Session
+            <select id="session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>NY</option>
+              <option>London</option>
+              <option>Asia</option>
+            </select>
+          </label>
+
           <label class="text-sm">Direction
-            <select id="direction" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" required>
+            <select id="direction" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
               <option>Long</option>
               <option>Short</option>
             </select>
           </label>
-          <label class="text-sm">Setup
-            <input id="setup" placeholder="FVG Continuation, BAG, Sweep+Reversal…" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+
+          <label class="text-sm">Symbol
+            <select id="symbolSel" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>NQ1!</option>
+              <option>ES1!</option>
+              <option>GC1!</option>
+              <option>CL1!</option>
+              <option value="__custom">Custom…</option>
+            </select>
+            <input id="symbol" class="mt-2 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hidden" placeholder="Type symbol" />
           </label>
+
+          <label class="text-sm">Setup
+            <select id="setup" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <option>FVG Continuation</option>
+              <option>IFVG</option>
+              <option>Sweep & Reversal</option>
+              <option>Other</option>
+            </select>
+          </label>
+
           <div class="grid grid-cols-3 gap-2">
             <label class="text-sm">Entry
-              <input id="entry" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+              <input id="entry" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             </label>
             <label class="text-sm">Stop
-              <input id="stop" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+              <input id="stop" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             </label>
             <label class="text-sm">Exit
-              <input id="exit" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
+              <input id="exit" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             </label>
           </div>
+
           <div class="grid grid-cols-3 gap-2">
             <label class="text-sm">R Multiple
-              <input id="rMultiple" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" placeholder="Auto if prices given" />
+              <input id="rMultiple" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" placeholder="Auto if prices given" />
             </label>
             <label class="text-sm">Outcome
-              <select id="outcome" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300">
+              <select id="outcome" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
                 <option>Win</option>
                 <option>Loss</option>
                 <option>BE</option>
               </select>
             </label>
-            <label class="text-sm">Session
-              <select id="session" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300">
-                <option>NY</option>
-                <option>London</option>
-                <option>Asia</option>
-              </select>
+            <label class="text-sm">Tags (comma)
+              <input id="tags" placeholder="Live, continuation" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             </label>
           </div>
-          <label class="text-sm">Tags (comma separated)
-            <input id="tags" placeholder="continuation, sweep, FVG" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" />
-          </label>
+
           <label class="text-sm">Notes
-            <textarea id="notes" rows="4" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300" placeholder="What was your read? psychology? execution?"></textarea>
+            <textarea id="notes" rows="4" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" placeholder="Idea, execution, psychology…"></textarea>
           </label>
         </div>
+
         <div class="grid gap-3">
-          <div id="dropzone" class="dropzone-dashed rounded-2xl bg-slate-50 p-4 text-center text-slate-500">
+          <div id="dropzone" class="dropzone-dashed rounded-2xl bg-slate-50 dark:bg-slate-900 p-4 text-center text-slate-500 dark:text-slate-400">
             <p class="mb-2 font-medium">Screenshots</p>
-            <p class="text-xs mb-2">Drag & drop, click to select, or <span class="font-semibold">paste</span> from clipboard</p>
+            <p class="text-xs mb-2">Drag & drop, tap to select, or <span class="font-semibold">paste</span> from clipboard</p>
             <input id="file-input" type="file" accept="image/*" multiple class="hidden" />
             <div id="thumbs" class="mt-3 grid grid-cols-3 gap-2"></div>
           </div>
-          <div class="text-xs text-slate-500">Tip: On Windows, use <kbd>Alt</kbd>+<kbd>PrintScreen</kbd> or any snipping tool, then paste here.</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Tip: On iPhone, take a screenshot → Copy → paste here.</div>
         </div>
       </div>
     </form>
   </dialog>
 
-  <template id="row-template">
-    <tr class="hover:bg-slate-50">
-      <td class="px-4 py-3 align-top date"></td>
-      <td class="px-4 py-3 align-top symbol font-medium"></td>
-      <td class="px-4 py-3 align-top direction"></td>
-      <td class="px-4 py-3 align-top setup"></td>
-      <td class="px-4 py-3 align-top text-right r"></td>
-      <td class="px-4 py-3 align-top outcome"></td>
-      <td class="px-4 py-3 align-top tags text-xs"></td>
-      <td class="px-4 py-3 align-top notes max-w-[28ch] truncate"></td>
-      <td class="px-4 py-3 align-top shots text-xs"></td>
-      <td class="px-4 py-3 align-top">
-        <button class="btn-view px-2 py-1 rounded-lg bg-slate-200 mr-1">View</button>
-        <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white mr-1">Edit</button>
-        <button class="btn-del px-2 py-1 rounded-lg bg-rose-600 text-white">Delete</button>
-      </td>
-    </tr>
-  </template>
-
-  <dialog id="lightbox" class="rounded-2xl backdrop:bg-black/60 w-full max-w-4xl">
-    <div class="p-3 flex items-center gap-3">
-      <div class="font-medium">Screenshots</div>
-      <button id="lb-close" class="ml-auto px-3 py-1.5 rounded-xl bg-slate-200">Close</button>
+  <!-- Day modal (calendar) -->
+  <dialog id="day-modal" class="rounded-2xl backdrop:bg-black/40 w-full max-w-3xl">
+    <div class="p-4 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl">
+      <div class="flex items-center gap-3 mb-2">
+        <h3 id="day-title" class="text-lg font-semibold">Trades</h3>
+        <button id="day-close" class="ml-auto px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">Close</button>
+      </div>
+      <div id="day-list" class="divide-y divide-slate-100 dark:divide-slate-800"></div>
     </div>
-    <div id="lb-grid" class="p-3 grid sm:grid-cols-2 gap-3"></div>
   </dialog>
 
-  <!-- App code as an ES module -->
+  <!-- App (ES module) -->
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
+    import Chart from 'https://esm.sh/chart.js@4.4.2/auto';
 
     // ---- Config ----
     dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
-
     const SUPABASE_URL = 'https://hugwlxbqwgqepoxpkqyt.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3dseGJxd2dxZXBveHBrcXl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMjI0NTcsImV4cCI6MjA3MDY5ODQ1N30.0Kq1AVl70mwst4LYsmyCJbxO6IvJG3cAOdi0IRSNf4c';
-
-    // ✅ Persist session inside the app container (PWA or browser tab)
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        storageKey: 'tj-auth'
-      }
-    });
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'tj-auth' } });
 
     let currentUser = null;
 
-    // --- Helpers ---
-    const qs = (sel, el=document) => el.querySelector(sel);
-    const qsa = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-    function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-    function calcR(entry, stop, exit) {
+    // ---- Theme ----
+    const THEME_KEY = 'tj-theme';
+    function applyThemeButton() {
+      const dark = document.documentElement.classList.contains('dark');
+      const label = dark ? 'Light' : 'Dark';
+      const btn = document.getElementById('btn-theme');
+      const btnm = document.getElementById('btn-theme-m');
+      if (btn) btn.textContent = label;
+      if (btnm) btnm.textContent = dark ? '☀️' : '🌙';
+      if (!document.getElementById('tab-dashboard').classList.contains('hidden')) renderDashboard();
+    }
+    function setTheme(mode){ document.documentElement.classList.toggle('dark', mode==='dark'); localStorage.setItem(THEME_KEY, mode); applyThemeButton(); }
+    setTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    document.getElementById('btn-theme')?.addEventListener('click', ()=> setTheme(document.documentElement.classList.contains('dark')?'light':'dark'));
+    document.getElementById('btn-theme-m')?.addEventListener('click', ()=> setTheme(document.documentElement.classList.contains('dark')?'light':'dark'));
+
+    // ---- Helpers ----
+    const qs = (s, el=document) => el.querySelector(s);
+    const qsa = (s, el=document) => Array.from(el.querySelectorAll(s));
+    const EMAIL_KEY = 'tj-email';
+    const fmt = d => dayjs(d).format('YYYY-MM-DD HH:mm');
+    function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+    function calcR(entry, stop, exit){
       if (!entry || !stop || !exit) return null;
-      const risk = Math.abs(entry - stop); if (risk === 0) return null;
+      const risk = Math.abs(entry - stop); if (!risk) return null;
       const reward = Math.abs(exit - entry);
       return +(reward / risk * (exit > entry ? (entry > stop ? 1 : -1) : (entry < stop ? 1 : -1))).toFixed(2);
     }
-    function computeStats(rows) {
-      const n = rows.length;
-      const wins = rows.filter(r => r.outcome === 'Win').length;
-      const losses = rows.filter(r => r.outcome === 'Loss').length;
-      const be = rows.filter(r => r.outcome === 'BE').length;
-      const rSum = rows.reduce((s, r) => s + (Number(r.rMultiple)||0), 0);
-      const avgR = n ? (rSum / n).toFixed(2) : '0.00';
-      const wr = n ? Math.round((wins / (wins + losses || 1)) * 100) : 0;
-      return { n, wins, losses, be, rSum: +rSum.toFixed(2), avgR, wr };
-    }
-    function renderKPIs(rows) {
-      const { n, wr, rSum, avgR, wins, losses, be } = computeStats(rows);
-      const kpi = (label, val, sub='') => `
-        <div class="bg-white border border-slate-200 rounded-2xl p-4">
-          <div class="text-xs uppercase text-slate-500">${label}</div>
-          <div class="text-2xl font-semibold">${val}</div>
-          ${sub ? `<div class='text-xs text-slate-500 mt-1'>${sub}</div>`: ''}
-        </div>`;
-      qs('#kpis').innerHTML = [
-        kpi('Total Trades', n, `${wins}W / ${losses}L / ${be}BE`),
-        kpi('Win Rate', wr + '%'),
-        kpi('Total R', rSum),
-        kpi('Avg R/Trade', avgR)
-      ].join('');
-    }
-    function renderSymbolFilter(all) {
-      const sel = qs('#filter-symbol');
-      const uniq = Array.from(new Set(all.map(e => e.symbol))).filter(Boolean).sort();
-      sel.innerHTML = `<option value="">All Symbols</option>` + uniq.map(s=>`<option>${s}</option>`).join('');
-    }
-    function makeRow(r) {
-      const tpl = qs('#row-template').content.cloneNode(true);
-      tpl.querySelector('.date').textContent = dayjs(r.date).format('YYYY-MM-DD HH:mm');
-      tpl.querySelector('.symbol').textContent = r.symbol;
-      tpl.querySelector('.direction').textContent = r.direction;
-      tpl.querySelector('.setup').textContent = r.setup || '';
-      tpl.querySelector('.r').textContent = r.rMultiple ?? '';
-      tpl.querySelector('.outcome').textContent = r.outcome || '';
-      tpl.querySelector('.tags').textContent = (r.tags||[]).join(', ');
-      tpl.querySelector('.notes').textContent = r.notes || '';
-      tpl.querySelector('.shots').textContent = r.images?.length ? r.images.length + ' shot' + (r.images.length>1?'s':'') : '';
-      const tr = tpl.querySelector('tr');
-      tr.dataset.id = r.id;
-      tr.querySelector('.btn-del').addEventListener('click', async ()=>{
-        if (!confirm('Delete this entry?')) return;
-        try { await deleteEntry(r.id); load(); } catch(e){ alert(e.message); }
-      });
-      tr.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
-      tr.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
-      return tr;
-    }
-    function applyFilters(rows) {
-      const q = qs('#filter-search').value.trim().toLowerCase();
-      const sym = qs('#filter-symbol').value;
-      const dir = qs('#filter-direction').value;
-      const out = qs('#filter-outcome').value;
-      return rows.filter(r => {
-        if (sym && r.symbol !== sym) return false;
-        if (dir && r.direction !== dir) return false;
-        if (out && r.outcome !== out) return false;
-        if (q) {
-          const hay = [r.symbol, r.setup, r.notes, (r.tags||[]).join(' ')].join(' ').toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
-      });
+    function withinWeek(d) {
+      const now = dayjs(); return dayjs(d).isAfter(now.startOf('week')) && dayjs(d).isBefore(now.endOf('week'));
     }
 
-    // --- Supabase data layer ---
+    // ---- Supabase DAL ----
     async function getEntries() {
       if (!currentUser) return [];
-      const { data, error } = await sb
-        .from('entries')
-        .select('*')
-        .order('date', { ascending: false });
+      const { data, error } = await sb.from('entries').select('*').order('date', { ascending: true });
       if (error) { console.error(error); return []; }
       return data.map(row => ({
         id: row.id,
@@ -341,61 +442,352 @@
       const { error } = await sb.from('entries').upsert(payload).select();
       if (error) throw error;
     }
-    async function deleteEntry(id) {
-      const { error } = await sb.from('entries').delete().eq('id', id);
-      if (error) throw error;
-    }
+    async function deleteEntry(id){ const { error } = await sb.from('entries').delete().eq('id', id); if (error) throw error; }
 
-    // --- UI render/load ---
-    async function load() {
-      if (!currentUser) {
-        renderSymbolFilter([]); qs('#entries-body').innerHTML = ''; renderKPIs([]); return;
+    // ---- Stats / KPIs ----
+    function computeStats(rows){
+      const n = rows.length;
+      const wins = rows.filter(r=>r.outcome==='Win');
+      const losses = rows.filter(r=>r.outcome==='Loss');
+      const be = rows.filter(r=>r.outcome==='BE');
+      const rSum = rows.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const wr = n ? Math.round((wins.length / (wins.length + losses.length || 1))*100) : 0;
+      const avgR = n ? +(rSum/n).toFixed(2) : 0;
+      const winSum = wins.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const lossSum = losses.reduce((s,r)=> s + (+r.rMultiple||0), 0);
+      const lossSumAbs = Math.abs(lossSum);
+      const pf = lossSumAbs ? +(winSum / lossSumAbs).toFixed(2) : (wins.length ? Infinity : 0);
+      const best = n ? Math.max(...rows.map(r=> +r.rMultiple || -Infinity)) : 0;
+      const worst = n ? Math.min(...rows.map(r=> +r.rMultiple || Infinity)) : 0;
+      const avgWin = wins.length ? +(winSum / wins.length).toFixed(2) : 0;
+      const avgLossAbs = losses.length ? +((Math.abs(lossSum)) / losses.length).toFixed(2) : 0;
+      const rr = avgLossAbs ? +(avgWin / avgLossAbs).toFixed(2) : (avgWin?Infinity:0);
+      const expectancy = avgR;
+
+      // streaks
+      let curW=0, curL=0, maxW=0, maxL=0;
+      for (const r of rows){
+        if (r.outcome==='Win'){ curW++; curL=0; maxW=Math.max(maxW,curW); }
+        else if (r.outcome==='Loss'){ curL++; curW=0; maxL=Math.max(maxL,curL); }
+        else { curW=0; curL=0; }
       }
-      const entries = await getEntries();
-      const filtered = applyFilters(entries);
-      const tbody = qs('#entries-body');
-      tbody.innerHTML = '';
-      filtered.forEach(r => tbody.appendChild(makeRow(r)));
-      renderSymbolFilter(entries);
-      renderKPIs(filtered);
+      let streak=0, streakKind='—';
+      for (let i=rows.length-1; i>=0; i--){
+        if (rows[i].outcome==='Win'){ streakKind='W'; streak++; }
+        else if (rows[i].outcome==='Loss'){ streakKind='L'; streak++; }
+        else break;
+      }
+      return { n, wins:wins.length, losses:losses.length, be:be.length, rSum:+rSum.toFixed(2), wr, avgR, pf, best, worst, avgWin, avgLossAbs, rr, expectancy, maxW, maxL, streak, streakKind };
+    }
+    function dailyTotals(rows){ return rows.reduce((m,r)=>{ const d=dayjs(r.date).format('YYYY-MM-DD'); m[d]=(m[d]||0)+(+r.rMultiple||0); return m; }, {}); }
+
+    function renderKpiStrip(rows){
+      const { n, wr, rSum, avgR, pf } = computeStats(rows);
+      const week = rows.filter(r=> withinWeek(r.date));
+      const wSum = week.reduce((s,r)=> s+(+r.rMultiple||0), 0);
+      const wWin = week.filter(r=> r.outcome==='Win').length;
+      const wLoss = week.filter(r=> r.outcome==='Loss').length;
+      const todayKey = dayjs().format('YYYY-MM-DD');
+      const todayR = dailyTotals(rows)[todayKey] ?? 0;
+
+      const card = (label,val,sub='')=>`
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+          <div class="text-[10px] uppercase text-slate-500 dark:text-slate-400">${label}</div>
+          <div class="text-xl font-semibold">${val}</div>
+          ${sub?`<div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${sub}</div>`:''}
+        </div>`;
+      qs('#kpi-strip').innerHTML = [
+        card('Trades', n, `${wr}% win`),
+        card('Total R', rSum),
+        card('Avg R/Trade', avgR),
+        card('Profit Factor', pf),
+        card('This Week', wSum.toFixed(2)+' R', `${wWin}W / ${wLoss}L`),
+        card('Today', (todayR>0?'+':'')+todayR.toFixed(2)+' R'),
+        card('Best R', rows.length?Math.max(...rows.map(r=>+r.rMultiple||-Infinity)):0),
+        card('Worst R', rows.length?Math.min(...rows.map(r=>+r.rMultiple||Infinity)):0),
+      ].join('');
+
+      // Journal ribbon mini-cards
+      qs('#r-week').textContent = wSum.toFixed(2)+' R';
+      qs('#r-week-detail').textContent = `${wWin}W / ${wLoss}L`;
+      const { streak, streakKind } = computeStats(rows);
+      qs('#streak').textContent = `${streak} ${streakKind}`;
+      qs('#streak-detail').textContent = `current ${streakKind==='W'?'winning':'losing'} streak`;
+      const sessions = ['NY','London','Asia'];
+      const sessCounts = Object.fromEntries(sessions.map(s=>[s, rows.filter(r=>r.session===s).length]));
+      const topSess = sessions.sort((a,b)=>sessCounts[b]-sessCounts[a])[0] || '—';
+      qs('#avg-session').textContent = topSess;
     }
 
-    // --- Modal / form logic ---
-    const modal = qs('#modal');
-    const form = qs('#entry-form');
-    const fileInput = qs('#file-input');
-    const thumbs = qs('#thumbs');
-    const clipboardImages = [];
+    // ---- Filters / Rendering ----
+    function renderSymbolFilter(all){
+      const sel = qs('#filter-symbol');
+      const uniq = Array.from(new Set(all.map(e=>e.symbol))).filter(Boolean).sort();
+      sel.innerHTML = `<option value="">All Symbols</option>` + uniq.map(s=>`<option>${s}</option>`).join('');
+    }
+    function applyFilters(rows){
+      const q = qs('#filter-search').value.trim().toLowerCase();
+      const sym = qs('#filter-symbol').value;
+      const dir = qs('#filter-direction').value;
+      const out = qs('#filter-outcome').value;
+      const typ = qs('#filter-type').value;
+      return rows.filter(r=>{
+        if (sym && r.symbol !== sym) return false;
+        if (dir && r.direction !== dir) return false;
+        if (out && r.outcome !== out) return false;
+        if (typ) {
+          const has = (r.tags||[]).map(t=>t.toLowerCase());
+          if (!has.includes(typ.toLowerCase())) return false;
+        }
+        if (q){
+          const hay = [r.symbol, r.setup, r.notes, (r.tags||[]).join(' ')].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+    function makeRow(r){
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800';
+      const typeTag = (r.tags||[]).find(t=>/live|backtest/i.test(t)) || '';
+      tr.innerHTML = `
+        <td class="px-4 py-3 align-top">${dayjs(r.date).format('YYYY-MM-DD HH:mm')}</td>
+        <td class="px-4 py-3 align-top font-medium">${r.symbol}</td>
+        <td class="px-4 py-3 align-top">${typeTag}</td>
+        <td class="px-4 py-3 align-top">${r.direction||''}</td>
+        <td class="px-4 py-3 align-top">${r.setup||''}</td>
+        <td class="px-4 py-3 align-top text-right">${r.rMultiple ?? ''}</td>
+        <td class="px-4 py-3 align-top">${r.outcome||''}</td>
+        <td class="px-4 py-3 align-top text-xs">${(r.tags||[]).join(', ')}</td>
+        <td class="px-4 py-3 align-top max-w-[28ch] truncate">${r.notes||''}</td>
+        <td class="px-4 py-3 align-top">
+          <button class="btn-view px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 mr-1">View</button>
+          <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white mr-1">Edit</button>
+          <button class="btn-del px-2 py-1 rounded-lg bg-rose-600 text-white">Delete</button>
+        </td>`;
+      tr.querySelector('.btn-del').addEventListener('click', async ()=>{ if(confirm('Delete this entry?')){ await deleteEntry(r.id); load(); }});
+      tr.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
+      tr.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
+      return tr;
+    }
+    function makeCard(r){
+      const typeTag = (r.tags||[]).find(t=>/live|backtest/i.test(t)) || '';
+      const el = document.createElement('div');
+      el.className = 'p-3';
+      el.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="flex-1">
+            <div class="text-sm font-medium">${r.symbol} • <span class="text-slate-500 dark:text-slate-400">${dayjs(r.date).format('MM-DD HH:mm')}</span></div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${typeTag} • ${r.session||''} • ${r.direction||''} • ${r.setup||''}</div>
+            <div class="text-sm mt-1">${r.notes||''}</div>
+            <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">${(r.tags||[]).join(', ')}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-base font-semibold ${(+r.rMultiple||0)>=0?'text-emerald-500':'text-rose-400'}">${r.rMultiple ?? ''} R</div>
+            <div class="text-xs">${r.outcome||''}</div>
+            <div class="mt-2">
+              <button class="btn-view px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 mr-1">View</button>
+              <button class="btn-edit px-2 py-1 rounded-lg bg-indigo-600 text-white">Edit</button>
+            </div>
+          </div>
+        </div>`;
+      el.querySelector('.btn-edit').addEventListener('click', ()=> openModal(r));
+      el.querySelector('.btn-view').addEventListener('click', ()=> openLightbox(r.images||[]));
+      return el;
+    }
+    function openLightbox(imgs){
+      const lb = document.createElement('dialog');
+      lb.className = 'rounded-2xl backdrop:bg-black/60 w-full max-w-4xl';
+      lb.innerHTML = `
+        <div class="p-3 flex items-center gap-3 bg-white dark:bg-slate-900 rounded-t-2xl">
+          <div class="font-medium">Screenshots</div>
+          <button class="ml-auto px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800">Close</button>
+        </div>
+        <div class="p-3 grid sm:grid-cols-2 gap-3 bg-white dark:bg-slate-900">
+          ${imgs.map(src=>`<img src="${src}" class="w-full rounded-xl border border-slate-200 dark:border-slate-800"/>`).join('')}
+        </div>`;
+      lb.querySelector('button').addEventListener('click', ()=> lb.close());
+      document.body.appendChild(lb); lb.showModal();
+      lb.addEventListener('close', ()=> lb.remove());
+    }
 
-    function resetForm(data={}) {
-      form.reset(); thumbs.innerHTML = ''; clipboardImages.length = 0;
+    // ---- Load & render ----
+    let ALL = [];
+    async function load(){
+      if (!currentUser) {
+        renderSymbolFilter([]); qs('#entries-body').innerHTML=''; qs('#cards').innerHTML=''; renderKpiStrip([]); renderDashboard(true); renderCalendar(true);
+        return;
+      }
+      ALL = await getEntries();
+      renderAll();
+    }
+    function renderAll(){
+      renderKpiStrip(ALL);
+      renderJournal();
+      if (!qs('#tab-dashboard').classList.contains('hidden')) renderDashboard();
+      if (!qs('#tab-calendar').classList.contains('hidden')) renderCalendar();
+    }
+    function renderJournal(){
+      const filtered = applyFilters(ALL);
+      const tbody = qs('#entries-body'); tbody.innerHTML=''; filtered.slice().reverse().forEach(r=> tbody.appendChild(makeRow(r)));
+      const cards = qs('#cards'); cards.innerHTML=''; filtered.slice().reverse().forEach(r=> cards.appendChild(makeCard(r)));
+      renderSymbolFilter(ALL);
+    }
+
+    // ---- Dashboard charts (fixed height, theme-aware) ----
+    let cumChart, dailyChart;
+    function mkChartColors() {
+      const dark = document.documentElement.classList.contains('dark');
+      return {
+        grid: dark ? 'rgba(148,163,184,0.2)' : 'rgba(100,116,139,0.2)',
+        tick: dark ? '#cbd5e1' : '#475569',
+        line: dark ? '#93c5fd' : '#4f46e5',
+        bar: dark ? '#a7f3d0' : '#10b981'
+      };
+    }
+    function renderDashboard(clearOnly=false){
+      if (clearOnly){ qs('#kpis').innerHTML=''; return; }
+      const stats = computeStats(ALL);
+      const kpi=(l,v,s='')=>`<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4"><div class="text-xs uppercase text-slate-500 dark:text-slate-400">${l}</div><div class="text-2xl font-semibold">${v}</div>${s?`<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">${s}</div>`:''}</div>`;
+      const byDay = dailyTotals(ALL); const days = Object.keys(byDay).sort();
+      const daily = days.map(d=> +byDay[d].toFixed(2));
+      const cum = []; daily.reduce((s,v,i)=> (cum[i]=+(s+v).toFixed(2), s+v), 0);
+      let peak=-Infinity, mdd=0; cum.forEach(c=>{ peak=Math.max(peak,c); mdd=Math.min(mdd, c-peak); });
+      const colors = mkChartColors();
+
+      qs('#kpis').innerHTML = [
+        kpi('Trades', stats.n, `${stats.wins}W / ${stats.losses}L / ${stats.be}BE`),
+        kpi('Win Rate', stats.wr + '%'),
+        kpi('Profit Factor', stats.pf),
+        kpi('Expectancy (R/trade)', stats.expectancy.toFixed(2)),
+        kpi('Avg Win (R)', stats.avgWin),
+        kpi('Avg Loss |R|', stats.avgLossAbs),
+        kpi('R:R', stats.rr===Infinity ? '∞' : stats.rr),
+        kpi('Max Drawdown (R)', mdd.toFixed(2))
+      ].join('');
+
+      // Cumulative
+      const ctx1 = qs('#cumrChart').getContext('2d');
+      if (cumChart) cumChart.destroy();
+      cumChart = new Chart(ctx1, {
+        type:'line',
+        data:{ labels: days, datasets:[{ label:'Cumulative R', data: cum, borderColor: colors.line, backgroundColor: colors.line, tension:.25, fill:false }] },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{ legend:{ display:false } },
+          scales:{
+            x:{ grid:{ color: colors.grid }, ticks:{ color: colors.tick, maxRotation:0 } },
+            y:{ grid:{ color: colors.grid }, ticks:{ color: colors.tick }, beginAtZero:true }
+          }
+        }
+      });
+
+      // Daily
+      const ctx2 = qs('#dailyChart').getContext('2d');
+      if (dailyChart) dailyChart.destroy();
+      dailyChart = new Chart(ctx2, {
+        type:'bar',
+        data:{ labels: days, datasets:[{ label:'Daily R', data: daily, backgroundColor: colors.bar }] },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{ legend:{ display:false } },
+          scales:{
+            x:{ grid:{ display:false }, ticks:{ color: colors.tick, maxRotation:0 } },
+            y:{ grid:{ color: colors.grid }, ticks:{ color: colors.tick }, beginAtZero:true }
+          }
+        }
+      });
+    }
+
+    // ---- Calendar ----
+    let calMonth = dayjs().startOf('month');
+    qs('#cal-prev').addEventListener('click', ()=>{ calMonth = calMonth.subtract(1,'month'); renderCalendar(); });
+    qs('#cal-next').addEventListener('click', ()=>{ calMonth = calMonth.add(1,'month'); renderCalendar(); });
+    function renderCalendar(clearOnly=false){
+      if (clearOnly){ qs('#cal-grid').innerHTML=''; qs('#cal-title').textContent = dayjs().format('MMMM YYYY'); return; }
+      qs('#cal-title').textContent = calMonth.format('MMMM YYYY');
+      const grid = qs('#cal-grid'); grid.innerHTML = '';
+      const start = calMonth.startOf('week'); const end = calMonth.endOf('month').endOf('week');
+      const totals = dailyTotals(ALL);
+      for (let d = start; d.isBefore(end) || d.isSame(end,'day'); d = d.add(1,'day')) {
+        const inMonth = d.isSame(calMonth,'month');
+        const key = d.format('YYYY-MM-DD');
+        const val = +(totals[key] || 0).toFixed(2);
+        const tone = val>0?'text-emerald-500':val<0?'text-rose-400':'text-slate-400';
+        const box = document.createElement('button');
+        box.className = 'text-left p-2 rounded-xl border ' + (inMonth?'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900':'border-transparent text-slate-400');
+        box.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="text-xs">${d.format('D')}</div>
+            <div class="text-xs ${tone}">${val ? (val>0?'+':'')+val+' R' : ''}</div>
+          </div>`;
+        if (inMonth) { box.addEventListener('click', ()=> openDayModal(key, val)); } else { box.disabled = true; }
+        grid.appendChild(box);
+      }
+    }
+    function openDayModal(isoDate, total){
+      const dm = qs('#day-modal');
+      qs('#day-title').textContent = `${dayjs(isoDate).format('MMMM D, YYYY')} — ${(total>0?'+':'')+total.toFixed(2)} R`;
+      const list = qs('#day-list'); list.innerHTML='';
+      const rows = ALL.filter(r=> dayjs(r.date).format('YYYY-MM-DD') === isoDate);
+      if (!rows.length) list.innerHTML = `<div class="p-3 text-sm text-slate-500 dark:text-slate-400">No trades</div>`;
+      rows.forEach(r=>{
+        const el = document.createElement('div');
+        el.className = 'p-3';
+        el.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="text-sm font-medium">${r.symbol} • ${r.direction} • ${r.setup||''}</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${dayjs(r.date).format('HH:mm')} • ${(r.tags||[]).join(', ')}</div>
+              <div class="text-sm mt-1">${r.notes||''}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-base font-semibold ${(+r.rMultiple||0)>=0?'text-emerald-500':'text-rose-400'}">${r.rMultiple ?? ''} R</div>
+              <div class="text-xs">${r.outcome||''}</div>
+            </div>
+          </div>`;
+        list.appendChild(el);
+      });
+      dm.showModal();
+    }
+    qs('#day-close').addEventListener('click', ()=> qs('#day-modal').close());
+
+    // ---- Modal / Entry form ----
+    const modal = qs('#modal'); const form = qs('#entry-form');
+    const fileInput = qs('#file-input'); const thumbs = qs('#thumbs'); const clipboardImages = [];
+    function resetForm(data={}){
+      form.reset(); thumbs.innerHTML=''; clipboardImages.length=0;
       qs('#date').value = data.date ? dayjs(data.date).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm');
-      qs('#symbol').value = data.symbol||'';
-      qs('#direction').value = data.direction||'Long';
-      qs('#setup').value = data.setup||'';
+      qs('#type').value = data.tags?.includes('Backtest') ? 'Backtest' : (data.tags?.includes('Live') ? 'Live' : (localStorage.getItem('def-type')||'Live'));
+      qs('#session').value = data.session || (localStorage.getItem('def-session')||'NY');
+      qs('#direction').value = data.direction || 'Long';
+      qs('#symbolSel').value = (['NQ1!','ES1!','GC1!','CL1!'].includes(data.symbol)?data.symbol:'__custom');
+      qs('#symbol').classList.toggle('hidden', qs('#symbolSel').value !== '__custom');
+      qs('#symbol').value = data.symbol || (qs('#symbolSel').value==='__custom'?'':qs('#symbolSel').value);
+      qs('#setup').value = data.setup||'FVG Continuation';
       qs('#entry').value = data.entry ?? '';
       qs('#stop').value = data.stop ?? '';
       qs('#exit').value = data.exit ?? '';
       qs('#rMultiple').value = data.rMultiple ?? '';
-      qs('#outcome').value = data.outcome||'Win';
-      qs('#session').value = data.session||'NY';
+      qs('#outcome').value = data.outcome || 'Win';
       qs('#tags').value = (data.tags||[]).join(', ');
-      qs('#notes').value = data.notes||'';
+      qs('#notes').value = data.notes || '';
       if (data.images?.length) data.images.forEach(addThumbUrl);
       form.dataset.id = data.id || '';
     }
+    function openModal(data){ resetForm(data||{}); modal.showModal(); }
+    qs('#btn-new')?.addEventListener('click', ()=> openModal());
+    qs('#btn-new-desktop')?.addEventListener('click', ()=> openModal());
+    qs('#btn-new-settings')?.addEventListener('click', ()=> openModal());
+    qs('#symbolSel').addEventListener('change', ()=>{
+      const v = qs('#symbolSel').value;
+      qs('#symbol').classList.toggle('hidden', v !== '__custom');
+      if (v !== '__custom') qs('#symbol').value = v; else qs('#symbol').value = '';
+    });
 
-    function openModal(data) { resetForm(data||{}); modal.showModal(); }
-
-    function addThumbUrl(url) {
-      const img = document.createElement('img');
-      img.src = url; img.className = 'thumb w-full h-32 object-cover rounded-xl border border-slate-200';
-      thumbs.appendChild(img);
-    }
-
-    function fileToDataUrl(file) { return new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload = ()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
-
-    // Paste handler
+    // Paste images
     document.addEventListener('paste', (e)=>{
       if (!modal.open) return;
       const items = Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/'));
@@ -408,6 +800,7 @@
     });
 
     // Dropzone
+    function addThumbUrl(url){ const img=document.createElement('img'); img.src=url; img.className='thumb w-full h-28 object-cover rounded-xl border border-slate-200 dark:border-slate-800'; thumbs.appendChild(img); }
     const dz = qs('#dropzone');
     dz.addEventListener('click', ()=> fileInput.click());
     dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('ring-2','ring-indigo-500'); });
@@ -415,60 +808,36 @@
     dz.addEventListener('drop', async (e)=>{
       e.preventDefault(); dz.classList.remove('ring-2','ring-indigo-500');
       const files = Array.from(e.dataTransfer.files||[]).filter(f=>f.type.startsWith('image/'));
-      for (const f of files) { const url = await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url); }
+      for (const f of files){ const url = await fileToDataUrl(f); addThumbUrl(url); clipboardImages.push(url); }
     });
-
-    // Auto R calc
-    ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{
-      const entry = parseFloat(qs('#entry').value), stop = parseFloat(qs('#stop').value), exit = parseFloat(qs('#exit').value);
-      const r = calcR(entry, stop, exit); if (r!=null) qs('#rMultiple').value = r;
-    }));
-
-    async function uploadDataUrlToStorage(dataUrl) {
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const ext = blob.type.split('/')[1] || 'png';
-      const path = `${currentUser.id}/${uid()}.${ext}`;
-      const { error } = await sb.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert: false });
-      if (error) throw error;
-      const { data } = sb.storage.from('shots').getPublicUrl(path);
-      return data.publicUrl;
-    }
-
-    async function gatherImages() {
-      if (!currentUser) return [];
-      const urls = [];
-      const files = Array.from(fileInput.files || []);
-      for (const f of files) {
-        const ext = (f.type.split('/')[1] || 'png');
-        const path = `${currentUser.id}/${uid()}.${ext}`;
-        const { error } = await sb.storage.from('shots').upload(path, f, { contentType: f.type, upsert: false });
-        if (error) throw error;
-        const { data } = sb.storage.from('shots').getPublicUrl(path);
-        urls.push(data.publicUrl);
-      }
-      for (const d of clipboardImages) { urls.push(await uploadDataUrlToStorage(d)); }
-      return urls;
-    }
+    function fileToDataUrl(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+    ['entry','stop','exit'].forEach(id=> qs('#'+id).addEventListener('input', ()=>{ const entry=parseFloat(qs('#entry').value), stop=parseFloat(qs('#stop').value), exit=parseFloat(qs('#exit').value); const r=calcR(entry,stop,exit); if (r!=null) qs('#rMultiple').value=r; }));
+    async function uploadDataUrlToStorage(dataUrl){ const res=await fetch(dataUrl); const blob=await res.blob(); const ext=blob.type.split('/')[1]||'png'; const path=`${currentUser.id}/${uid()}.${ext}`; const {error}=await sb.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert:false }); if (error) throw error; const {data}=sb.storage.from('shots').getPublicUrl(path); return data.publicUrl; }
+    async function gatherImages(){ if (!currentUser) return []; const urls=[]; const files=Array.from(fileInput.files||[]); for (const f of files){ const ext=(f.type.split('/')[1]||'png'); const path=`${currentUser.id}/${uid()}.${ext}`; const {error}=await sb.storage.from('shots').upload(path, f, { contentType: f.type, upsert:false }); if (error) throw error; const {data}=sb.storage.from('shots').getPublicUrl(path); urls.push(data.publicUrl); } for (const d of clipboardImages){ urls.push(await uploadDataUrlToStorage(d)); } return urls; }
 
     // Save
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       if (!currentUser) { alert('Please sign in first.'); return; }
       const id = form.dataset.id || undefined;
+      const sel = qs('#symbolSel').value;
+      const symbol = sel==='__custom' ? qs('#symbol').value.trim() : sel;
+      const type = qs('#type').value;
+      const tagsSet = new Set(qs('#tags').value.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s[0].toUpperCase()+s.slice(1)));
+      tagsSet.add(type); // ensure Live/Backtest tag
       const rec = {
         id,
         date: new Date(qs('#date').value).toISOString(),
-        symbol: qs('#symbol').value.trim(),
+        symbol,
         direction: qs('#direction').value,
-        setup: qs('#setup').value.trim(),
+        setup: qs('#setup').value,
         entry: parseFloat(qs('#entry').value)||null,
         stop: parseFloat(qs('#stop').value)||null,
         exit: parseFloat(qs('#exit').value)||null,
         rMultiple: parseFloat(qs('#rMultiple').value)||null,
         outcome: qs('#outcome').value,
         session: qs('#session').value,
-        tags: qs('#tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+        tags: Array.from(tagsSet),
         notes: qs('#notes').value.trim(),
         images: []
       };
@@ -478,135 +847,116 @@
         await upsertEntry(rec);
         modal.close();
         load();
-      } catch(err) { alert('Save failed: '+err.message); }
+      } catch(err){ alert('Save failed: '+err.message); }
     });
-
     qs('#btn-cancel').addEventListener('click', ()=> modal.close());
-    qs('#btn-new').addEventListener('click', ()=> openModal());
 
-    // Export / Import / Reset (cloud-based)
-    qs('#btn-export').addEventListener('click', async ()=>{
-      if (!currentUser) { alert('Sign in first.'); return; }
-      const entries = await getEntries();
-      const data = { exportedAt: new Date().toISOString(), entries };
-      const blob = new Blob([JSON.stringify(data,null,2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `trading-journal-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url);
-    });
+    // ---- Filters ----
+    qsa('#filter-search, #filter-symbol, #filter-direction, #filter-outcome, #filter-type').forEach(el=> el.addEventListener('input', renderJournal));
+    qsa('.chip').forEach(ch => ch.addEventListener('click', ()=>{
+      const expr = ch.dataset.q;
+      if (expr.startsWith('setup:')) qs('#filter-search').value = expr.replace('setup:','');
+      else if (expr.startsWith('tags:')) qs('#filter-type').value = expr.replace('tags:','');
+      renderJournal();
+    }));
 
-    qs('#file-import').addEventListener('change', async (e)=>{
-      if (!currentUser) { alert('Sign in first.'); return; }
-      const file = e.target.files[0]; if (!file) return;
-      const text = await file.text();
-      try {
-        const data = JSON.parse(text);
-        if (!Array.isArray(data.entries)) throw new Error('Invalid file');
-        for (const row of data.entries) {
-          await upsertEntry({
-            id: row.id,
-            date: row.date,
-            symbol: row.symbol,
-            direction: row.direction,
-            setup: row.setup,
-            entry: row.entry,
-            stop: row.stop,
-            exit: row.exit,
-            rMultiple: row.rMultiple,
-            outcome: row.outcome,
-            session: row.session,
-            tags: row.tags,
-            notes: row.notes,
-            images: row.images
-          });
-        }
-        load(); alert('Import complete');
-      } catch(err) { alert('Import failed: '+err.message); }
-      e.target.value = '';
-    });
+    // ---- Tabs ----
+    const $tabs = qsa('.tab'); const $views = qsa('.tabview');
+    $tabs.forEach(btn => btn.addEventListener('click', ()=> {
+      $tabs.forEach(b=>b.classList.remove('bg-indigo-600','text-white'));
+      btn.classList.add('bg-indigo-600','text-white');
+      const t = btn.dataset.tab;
+      $views.forEach(v => v.classList.toggle('hidden', v.id !== 'tab-'+t));
+      if (t==='dashboard') renderDashboard();
+      if (t==='calendar') renderCalendar();
+    }));
+    qsa('.bn').forEach(btn => btn.addEventListener('click', ()=> {
+      const t = btn.dataset.tab;
+      const topBtn = qs('.tab[data-tab="'+t+'"]'); topBtn?.click();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }));
 
-    qs('#btn-clear').addEventListener('click', async ()=>{
-      if (!currentUser) { alert('Sign in first.'); return; }
-      if (!confirm('This will erase ALL your entries in the cloud for this account. Continue?')) return;
-      const { error } = await sb.from('entries').delete().neq('id', null);
-      if (error) { alert(error.message); return; }
-      load();
-    });
+    // ---- Settings ----
+    qs('#def-type').value = localStorage.getItem('def-type') || 'Live';
+    qs('#def-session').value = localStorage.getItem('def-session') || 'NY';
+    qs('#def-type').addEventListener('change', e=> localStorage.setItem('def-type', e.target.value));
+    qs('#def-session').addEventListener('change', e=> localStorage.setItem('def-session', e.target.value));
 
-    // Lightbox
-    function openLightbox(imgs) {
-      const lb = qs('#lightbox');
-      const grid = qs('#lb-grid');
-      grid.innerHTML = imgs.map(src=>`<img src="${src}" class="w-full rounded-xl border border-slate-200"/>`).join('');
-      lb.showModal();
+    // ---- Export / Import / Reset (header + settings) ----
+    function connectDataButtons(prefix=''){
+      const id = (x)=> prefix? `#${x}-${prefix}` : `#${x}`;
+      qs(id('btn-export'))?.addEventListener('click', async ()=>{
+        if (!currentUser) return alert('Sign in first.');
+        const rows = await getEntries();
+        const data = { exportedAt: new Date().toISOString(), entries: rows };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `trading-journal-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url);
+      });
+      qs(id('file-import'))?.addEventListener('change', async (e)=>{
+        if (!currentUser) return alert('Sign in first.');
+        const file = e.target.files[0]; if (!file) return;
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          if (!Array.isArray(data.entries)) throw new Error('Invalid file');
+          for (const row of data.entries) {
+            await upsertEntry({
+              id: row.id, date: row.date, symbol: row.symbol, direction: row.direction, setup: row.setup,
+              entry: row.entry, stop: row.stop, exit: row.exit, rMultiple: row.rMultiple, outcome: row.outcome,
+              session: row.session, tags: row.tags, notes: row.notes, images: row.images
+            });
+          }
+          load(); alert('Import complete');
+        } catch(err){ alert('Import failed: '+err.message); }
+        e.target.value = '';
+      });
+      qs(id('btn-clear'))?.addEventListener('click', async ()=>{
+        if (!currentUser) return alert('Sign in first.');
+        if (!confirm('This will erase ALL your entries in the cloud for this account. Continue?')) return;
+        const { error } = await sb.from('entries').delete().neq('id', null);
+        if (error) return alert(error.message);
+        load();
+      });
     }
-    qs('#lb-close').addEventListener('click', ()=> qs('#lightbox').close());
+    connectDataButtons('settings'); // settings page
+    connectDataButtons('');         // header
 
-    // Filter handlers
-    ['filter-search','filter-symbol','filter-direction','filter-outcome'].forEach(id=>
-      qs('#'+id).addEventListener('input', load)
-    );
-
-    // --- Auth UI ---
-    const btnLogin = qs('#btn-login');
-    const btnLogout = qs('#btn-logout');
-
-    async function ensureSession() {
+    // ---- Auth (OTP code flow; good for PWA) ----
+    async function ensureSession(){
       const { data: { user } } = await sb.auth.getUser();
       currentUser = user;
-      btnLogin?.classList.toggle('hidden', !!user);
-      btnLogout?.classList.toggle('hidden', !user);
+      const signed = !!user;
+      qs('#btn-login')?.classList.toggle('hidden', signed);
+      qs('#btn-logout')?.classList.toggle('hidden', !signed);
+      qs('#btn-login-m')?.classList.toggle('hidden', signed);
+      qs('#btn-logout-m')?.classList.toggle('hidden', !signed);
     }
-
-    // ✅ Code-based sign in flow (works inside installed PWA on iOS)
-    const EMAIL_KEY = 'tj-email';
-    btnLogin?.addEventListener('click', async () => {
+    async function startOtp(){
       const defaultEmail = localStorage.getItem(EMAIL_KEY) || '';
-      const email = prompt('Enter your email (we\'ll send a 6-digit code):', defaultEmail);
+      const email = prompt('Enter your email (we will send a 6-digit code):', defaultEmail);
       if (!email) return;
       localStorage.setItem(EMAIL_KEY, email);
-
-      // include redirect for desktop fallback
-      let redirectTo = window.location.origin + window.location.pathname;
-      if (!redirectTo.endsWith('/')) redirectTo += '/';
-
-      const { error } = await sb.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
-      });
+      let redirectTo = window.location.origin + window.location.pathname; if (!redirectTo.endsWith('/')) redirectTo += '/';
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true } });
       if (error) return alert(error.message);
+      const code = prompt('Enter the 6-digit code from your email (ignore the link):'); if (!code) return;
+      const { error: verifyErr } = await sb.auth.verifyOtp({ email, token: code.trim(), type: 'email' });
+      if (verifyErr) return alert('Code verification failed: '+verifyErr.message);
+      alert('Signed in!'); await ensureSession(); load();
+    }
+    qs('#btn-login')?.addEventListener('click', startOtp);
+    qs('#btn-login-m')?.addEventListener('click', startOtp);
+    qs('#btn-logout')?.addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser=null; load(); });
+    qs('#btn-logout-m')?.addEventListener('click', async ()=>{ await sb.auth.signOut(); currentUser=null; load(); });
+    sb.auth.onAuthStateChange((_e, session)=>{ currentUser = session?.user ?? null; ensureSession().then(load); });
 
-      const code = prompt('Enter the 6-digit code from your email (ignore the link):');
-      if (!code) return;
-
-      const { error: verifyErr } = await sb.auth.verifyOtp({
-        email,
-        token: code.trim(),
-        type: 'email'
-      });
-      if (verifyErr) return alert('Code verification failed: ' + verifyErr.message);
-
-      alert('Signed in!');
-    });
-
-    btnLogout?.addEventListener('click', async () => {
-      await sb.auth.signOut();
-      currentUser = null;
-      load();
-    });
-
-    // Keep session updated
-    sb.auth.onAuthStateChange((_e, session) => {
-      currentUser = session?.user ?? null;
-      ensureSession().then(load);
-    });
-
-    // Start
+    // ---- Init ----
     await ensureSession();
     load();
   </script>
 
-  <!-- PWA: register the service worker (must use your repo subpath) -->
+  <!-- PWA: service worker -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
